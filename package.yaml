@@ -24,8 +24,9 @@ dependencies:
 - aeson
 - filepath
 - network-uri
-- uri-encode
 - split
+- text
+- uri-encode
 
 library:
   source-dirs: src

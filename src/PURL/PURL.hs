@@ -10,6 +10,7 @@ module PURL.PURL
 import qualified Data.Aeson         as A
 import           Data.List.Split    (splitOn)
 import           Data.Maybe         (fromMaybe, maybeToList)
+import qualified Data.Text          as T
 import           GHC.Generics       (Generic)
 import qualified Network.URI        as URI
 import qualified Network.URI.Encode as URI
@@ -65,6 +66,12 @@ parsePURL_Type "nuget"     = PURL_TypeNuget
 parsePURL_Type "pypi"      = PURL_TypePyPi
 parsePURL_Type "rpm"       = PURL_TypeRPM
 parsePURL_Type s           = PURL_Type s
+
+instance A.ToJSON PURL_Type where
+  toJSON = A.toJSON . show
+
+instance A.FromJSON PURL_Type where
+  parseJSON = A.withText "" $ return . parsePURL_Type . T.unpack
 
 data PURL =
   PURL
