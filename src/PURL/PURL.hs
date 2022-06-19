@@ -15,6 +15,7 @@ import           GHC.Generics       (Generic)
 import qualified Network.URI        as URI
 import qualified Network.URI.Encode as URI
 import qualified System.FilePath    as FP
+import qualified Data.String as String
 
 data PURL_Type
   = PURL_TypeBitbucket
@@ -66,6 +67,9 @@ parsePURL_Type "nuget"     = PURL_TypeNuget
 parsePURL_Type "pypi"      = PURL_TypePyPi
 parsePURL_Type "rpm"       = PURL_TypeRPM
 parsePURL_Type s           = PURL_Type s
+
+instance String.IsString PURL_Type where
+  fromString = parsePURL_Type
 
 instance A.ToJSON PURL_Type where
   toJSON = A.toJSON . show
