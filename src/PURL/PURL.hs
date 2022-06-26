@@ -2,6 +2,7 @@
 
 module PURL.PURL
   ( PURL_Type(..)
+  , defaultPurlScheme
   , parsePURL_Type
   , PURL(..)
   , parsePURL
@@ -89,17 +90,20 @@ data PURL =
     }
   deriving (Eq, Generic)
 
+defaultPurlScheme :: String
+defaultPurlScheme = "pkg"
+
 instance Show PURL where
   show (PURL pScheme pType pNamespace pName pVersion pQualifier pSubpath) =
     let uri =
           URI.URI
-            { URI.uriScheme = ("pkg" `fromMaybe` pScheme) ++ ":"
+            { URI.uriScheme = (defaultPurlScheme `fromMaybe` pScheme) ++ ":"
             , URI.uriAuthority = Nothing
             , URI.uriPath =
                 FP.joinPath
                   ((map
                       URI.encode
-                      (maybeToList (fmap show pType) ++ maybeToList pNamespace)) ++
+                      (show (PURL_TypeGeneric `fromMaybe` pType) : maybeToList pNamespace)) ++
                    [ (URI.encode pName) ++
                      (maybe "" ('@' :) (fmap URI.encode pVersion))
                    ])
