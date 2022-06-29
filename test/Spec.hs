@@ -2,11 +2,17 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
+
+import           Data.FileEmbed                 ( embedFile )
+import           Data.Maybe                     ( fromJust, fromMaybe )
 import           Test.Hspec
 import           Test.QuickCheck
-import           Data.Maybe (fromJust)
+import qualified Data.Aeson                    as A
+import qualified Data.ByteString.Lazy          as B
 
 import           PURL.PURL
+
+
 
 npmPurl = "pkg:npm/%40angular/animation@12.3.1"
 purls =
@@ -28,15 +34,69 @@ purls =
   , "pkg:rpm/opensuse/curl@7.56.1-1.1.?arch=i386&distro=opensuse-tumbleweed"
   ]
 
+data TestSuiteCase
+  = TestSuiteCase
+  { _desrciption :: String
+  , _input_purl :: String
+  , _canonical_purl :: String
+  , _parsed_purl :: PURL
+  , _is_invalid :: Bool
+  } deriving (Show)
+instance A.FromJSON TestSuiteCase where
+  parseJSON = A.withObject "TestSuiteCase" $ \c -> do
+    ty <- c A..:? "type"
+    ns <- c A..:? "namespace"
+    n <- ("$null" `fromMaybe`) <$> c A..:? "name"
+    v <- c A..:? "version"
+    -- q <- c A..:? "qualifiers"
+    let q' = Nothing
+    s <- c A..:? "subpath"
+
+    TestSuiteCase <$> c A..: "description"
+                   <*> c A..: "purl"
+                   <*> (("$null" `fromMaybe`) <$> c A..:?"canonical_purl")
+                   <*> (pure (PURL (Just defaultPurlScheme) ty ns n v q' s))
+                   <*> c A..: "is_invalid"
+
+
+
+purlTestSuite =
+  let testSuiteData :: B.ByteString
+      testSuiteData =
+        B.fromStrict
+          $(embedFile "purl-spec/test-suite-data.json")
+  in case A.eitherDecode testSuiteData :: Either String [TestSuiteCase] of
+    Right cs -> mapM_ (\c -> do
+        it ((_desrciption c) ++ ": " ++ (_input_purl c)) $ 
+          if (_is_invalid c)
+          then do
+            parsePURL (_input_purl c) `shouldBe` Nothing
+          else do
+            let parsedInputPurl = parsePURL (_input_purl c)
+            parsedInputPurl `shouldNotBe` Nothing
+            parsePURL (_canonical_purl c) `shouldNotBe` Nothing
+            parsedInputPurl `shouldBe` (Just (_parsed_purl c))
+      ) cs
+    Left err -> it "fail on failure of parsing :)" $ do
+      err `shouldBe` ""
+
 main :: IO ()
 main = hspec $ describe "PURL" $ do
   it "all example puls should be paseable" $ do
     mapM_ (\purl -> parsePURL purl `shouldNotBe` Nothing) purls
   it "all example puls should adhere some identity" $ do
-    mapM_ (\purl -> do
-        (show . fromJust . parsePURL) purl `shouldBe` purl) purls
+    mapM_
+      (\purl -> do
+        (show . fromJust . parsePURL) purl `shouldBe` purl
+      )
+      purls
   it "it should decode PURL corectly" $ do
-    (_PURL_type =<< (parsePURL "pkg:npm/%40angular/animation@12.3.1")) `shouldBe` (Just PURL_TypeNPM)
-    (_PURL_namespace =<< (parsePURL "pkg:npm/%40angular/animation@12.3.1")) `shouldBe` (Just "@angular")
-    (fmap _PURL_name (parsePURL "pkg:npm/%40angular/animation@12.3.1")) `shouldBe` (Just "animation")
-    (_PURL_version =<< (parsePURL "pkg:npm/%40angular/animation@12.3.1")) `shouldBe` (Just "12.3.1")
+    (_PURL_type =<< (parsePURL "pkg:npm/%40angular/animation@12.3.1"))
+      `shouldBe` (Just PURL_TypeNPM)
+    (_PURL_namespace =<< (parsePURL "pkg:npm/%40angular/animation@12.3.1"))
+      `shouldBe` (Just "@angular")
+    (fmap _PURL_name (parsePURL "pkg:npm/%40angular/animation@12.3.1"))
+      `shouldBe` (Just "animation")
+    (_PURL_version =<< (parsePURL "pkg:npm/%40angular/animation@12.3.1"))
+      `shouldBe` (Just "12.3.1")
+  purlTestSuite

@@ -43,3 +43,6 @@ tests:
     - packageurl
     - hspec
     - QuickCheck
+    - aeson
+    - file-embed
+    - bytestring

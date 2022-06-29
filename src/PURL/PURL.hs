@@ -8,15 +8,17 @@ module PURL.PURL
   , parsePURL
   ) where
 
-import qualified Data.Aeson         as A
-import           Data.List.Split    (splitOn)
-import           Data.Maybe         (fromMaybe, maybeToList)
-import qualified Data.Text          as T
-import           GHC.Generics       (Generic)
-import qualified Network.URI        as URI
-import qualified Network.URI.Encode as URI
-import qualified System.FilePath    as FP
-import qualified Data.String as String
+import qualified Data.Aeson                    as A
+import           Data.List.Split                ( splitOn )
+import           Data.Maybe                     ( fromMaybe
+                                                , maybeToList
+                                                )
+import qualified Data.String                   as String
+import qualified Data.Text                     as T
+import           GHC.Generics                   ( Generic )
+import qualified Network.URI                   as URI
+import qualified Network.URI.Encode            as URI
+import qualified System.FilePath               as FP
 
 data PURL_Type
   = PURL_TypeBitbucket
@@ -78,16 +80,15 @@ instance A.ToJSON PURL_Type where
 instance A.FromJSON PURL_Type where
   parseJSON = A.withText "" $ return . parsePURL_Type . T.unpack
 
-data PURL =
-  PURL
-    { _PURL_scheme     :: Maybe String
-    , _PURL_type       :: Maybe PURL_Type
-    , _PURL_namespace  :: Maybe String
-    , _PURL_name       :: String
-    , _PURL_version    :: Maybe String
-    , _PURL_qualifiers :: Maybe String
-    , _PURL_subpath    :: Maybe String
-    }
+data PURL = PURL
+  { _PURL_scheme     :: Maybe String
+  , _PURL_type       :: Maybe PURL_Type
+  , _PURL_namespace  :: Maybe String
+  , _PURL_name       :: String
+  , _PURL_version    :: Maybe String
+  , _PURL_qualifiers :: Maybe String
+  , _PURL_subpath    :: Maybe String
+  }
   deriving (Eq, Generic)
 
 defaultPurlScheme :: String
@@ -95,69 +96,68 @@ defaultPurlScheme = "pkg"
 
 instance Show PURL where
   show (PURL pScheme pType pNamespace pName pVersion pQualifier pSubpath) =
-    let uri =
-          URI.URI
-            { URI.uriScheme = (defaultPurlScheme `fromMaybe` pScheme) ++ ":"
-            , URI.uriAuthority = Nothing
-            , URI.uriPath =
-                FP.joinPath
-                  ((map
-                      URI.encode
-                      (show (PURL_TypeGeneric `fromMaybe` pType) : maybeToList pNamespace)) ++
-                   [ (URI.encode pName) ++
-                     (maybe "" ('@' :) (fmap URI.encode pVersion))
-                   ])
-            , URI.uriQuery = "" `fromMaybe` pQualifier
-            , URI.uriFragment = "" `fromMaybe` (fmap ('#' :) pSubpath)
-            }
-     in show uri
+    let
+      uri = URI.URI
+        { URI.uriScheme    = (defaultPurlScheme `fromMaybe` pScheme) ++ ":"
+        , URI.uriAuthority = Nothing
+        , URI.uriPath      = FP.joinPath
+          (  (map
+               URI.encode
+               (show (PURL_TypeGeneric `fromMaybe` pType) : maybeToList pNamespace
+               )
+             )
+          ++ [ (URI.encode pName)
+                 ++ (maybe "" ('@' :) (fmap URI.encode pVersion))
+             ]
+          )
+        , URI.uriQuery     = "" `fromMaybe` pQualifier
+        , URI.uriFragment  = "" `fromMaybe` (fmap ('#' :) pSubpath)
+        }
+    in  show uri
 
 instance A.ToJSON PURL
 
 instance A.FromJSON PURL
 
 parsePURL :: String -> Maybe PURL
-parsePURL uriStr =
-  case URI.parseURI uriStr of
-    Just uri ->
-      let pScheme = Just (filter (/= ':') (URI.uriScheme uri))
-          (pType, pNamespace, (pName, pVersion)) =
-            let parseNameAndVersion :: String -> (String, Maybe String)
-                parseNameAndVersion pNameAndVersion =
-                  case splitOn "@" pNameAndVersion of
-                    [pName, pVersion] ->
-                      (URI.decode pName, Just (URI.decode pVersion))
-                    _ -> (URI.decode pNameAndVersion, Nothing)
-                path = URI.uriPath uri
-             in case FP.splitPath path of
-                  [pNameAndVersion] ->
-                    (Nothing, Nothing, parseNameAndVersion pNameAndVersion)
-                  [pType, pNameAndVersion] ->
-                    ( Just (FP.dropTrailingPathSeparator pType)
-                    , Nothing
-                    , parseNameAndVersion pNameAndVersion)
-                  (pType:ps) ->
-                    let pNameAndVersion = last ps
-                        pNamespace =
-                          (FP.dropTrailingPathSeparator . FP.joinPath . init) ps
-                     in ( Just (FP.dropTrailingPathSeparator pType)
-                        , (Just . URI.decode) pNamespace
-                        , parseNameAndVersion pNameAndVersion)
-          pQualifier =
-            case URI.uriQuery uri of
-              [] -> Nothing
-              qs -> Just $ qs
-          pSubpath =
-            case (URI.uriFragment uri) of
-              ""       -> Nothing
-              fragment -> Just (tail fragment)
-       in Just $
-          PURL
-            pScheme
-            (fmap parsePURL_Type pType)
-            pNamespace
-            pName
-            pVersion
-            pQualifier
-            pSubpath
-    Nothing -> Nothing
+parsePURL uriStr = case URI.parseURI uriStr of
+  Just uri ->
+    let pScheme = Just (filter (/= ':') (URI.uriScheme uri))
+        (pType, pNamespace, (pName, pVersion)) =
+          let parseNameAndVersion :: String -> (String, Maybe String)
+              parseNameAndVersion pNameAndVersion =
+                case splitOn "@" pNameAndVersion of
+                  [pName, pVersion] ->
+                    (URI.decode pName, Just (URI.decode pVersion))
+                  _ -> (URI.decode pNameAndVersion, Nothing)
+              path = URI.uriPath uri
+          in  case FP.splitPath path of
+                [pNameAndVersion] ->
+                  (Nothing, Nothing, parseNameAndVersion pNameAndVersion)
+                [pType, pNameAndVersion] ->
+                  ( Just (FP.dropTrailingPathSeparator pType)
+                  , Nothing
+                  , parseNameAndVersion pNameAndVersion
+                  )
+                (pType : ps) ->
+                  let pNameAndVersion = last ps
+                      pNamespace =
+                        (FP.dropTrailingPathSeparator . FP.joinPath . init) ps
+                  in  ( Just (FP.dropTrailingPathSeparator pType)
+                      , (Just . URI.decode) pNamespace
+                      , parseNameAndVersion pNameAndVersion
+                      )
+        pQualifier = case URI.uriQuery uri of
+          [] -> Nothing
+          qs -> Just $ qs
+        pSubpath = case (URI.uriFragment uri) of
+          ""       -> Nothing
+          fragment -> Just (tail fragment)
+    in  Just $ PURL pScheme
+                    (fmap parsePURL_Type pType)
+                    pNamespace
+                    pName
+                    pVersion
+                    pQualifier
+                    pSubpath
+  Nothing -> Nothing
