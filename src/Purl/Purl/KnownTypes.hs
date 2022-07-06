@@ -78,25 +78,25 @@ addDescription d kpt = kpt{getKptDescription = d}
 -- mkKPT t f desc = f (AddDescription desc (KPT (PurlType t)))
 
 namespaceCaseInsensitive =
-  let namespacesToLowercase (p@Purl { _PurlNamespace = namespace })
-        = p { _PurlNamespace = fmap stringToLower namespace }
+  let namespacesToLowercase (p@Purl { purlNamespace = namespace })
+        = p { purlNamespace = fmap stringToLower namespace }
   in  addNormalizer namespacesToLowercase
 
 nameCaseInsensitive =
-  let namesToLowercase (p@Purl { _PurlName = name })
-        = p { _PurlName      = stringToLower name }
+  let namesToLowercase (p@Purl { purlName = name })
+        = p { purlName      = stringToLower name }
   in  namespaceCaseInsensitive . (addNormalizer namesToLowercase)
 
 namespaceMandatory =
-  let namespaceMandatoryFun (p@Purl { _PurlNamespace = Nothing }) = False
-      namespaceMandatoryFun (p@Purl { _PurlNamespace = Just "" }) = False
-      namespaceMandatoryFun (p@Purl { _PurlNamespace = _ }) = True
+  let namespaceMandatoryFun (p@Purl { purlNamespace = Nothing }) = False
+      namespaceMandatoryFun (p@Purl { purlNamespace = Just "" }) = False
+      namespaceMandatoryFun (p@Purl { purlNamespace = _ }) = True
   in  addValidator namespaceMandatoryFun
 
 versionMandatory =
-  let versionMandatoryFun (p@Purl {_PurlVersion = Nothing}) = False
-      versionMandatoryFun (p@Purl {_PurlVersion = Just ""}) = False
-      versionMandatoryFun (p@Purl {_PurlVersion = _}) = False
+  let versionMandatoryFun (p@Purl {purlVersion = Nothing}) = False
+      versionMandatoryFun (p@Purl {purlVersion = Just ""}) = False
+      versionMandatoryFun (p@Purl {purlVersion = _}) = False
   in  addValidator versionMandatoryFun
 
 knownPurlTypes =
@@ -161,13 +161,13 @@ composer
       pkg:composer/laravel/laravel@5.5.0
 |]
   , mkKPT "conan" (defaultRepository "https://center.conan.io" . addValidator (let
-      hasChannelQualifier (Purl{_PurlQualifiers = qs}) = case "channel" `Map.lookup` qs of
+      hasChannelQualifier (Purl{purlQualifiers = qs}) = case "channel" `Map.lookup` qs of
         Just "" -> False
         Nothing -> False
         _       -> True
     in \case
-          (p@(Purl{_PurlNamespace = Just _})) -> hasChannelQualifier p
-          (p@(Purl{_PurlNamespace = Nothing})) -> not $ hasChannelQualifier p))
+          (p@(Purl{purlNamespace = Just _})) -> hasChannelQualifier p
+          (p@(Purl{purlNamespace = Nothing})) -> not $ hasChannelQualifier p))
           [r|
 conan
 -----
@@ -461,7 +461,7 @@ pub
 |]
   , mkKPT "pypi" (defaultRepository "https://pypi.python.org" . nameCaseInsensitive . addNormalizer (let
       underscoreToDash = map (\c -> if c == '_' then '-' else c)
-    in (\p@Purl {_PurlNamespace = ns, _PurlName = n} -> p {_PurlNamespace = fmap underscoreToDash ns, _PurlName = underscoreToDash n })))
+    in (\p@Purl {purlNamespace = ns, purlName = n} -> p {purlNamespace = fmap underscoreToDash ns, purlName = underscoreToDash n })))
           [r|
 pypi
 ----

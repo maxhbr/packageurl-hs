@@ -51,12 +51,12 @@ purlTypeGeneric :: PurlType
 purlTypeGeneric = PurlType "generic"
 
 data Purl = Purl
-  { _PurlType       :: Maybe PurlType
-  , _PurlNamespace  :: Maybe String
-  , _PurlName       :: String
-  , _PurlVersion    :: Maybe String
-  , _PurlQualifiers :: Map.Map String String
-  , _PurlSubpath    :: Maybe FilePath
+  { purlType       :: Maybe PurlType
+  , purlNamespace  :: Maybe String
+  , purlName       :: String
+  , purlVersion    :: Maybe String
+  , purlQualifiers :: Map.Map String String
+  , purlSubpath    :: Maybe FilePath
   }
   deriving Eq
 

@@ -82,10 +82,10 @@ purlTestSuite =
                 it (prefix ++ "should be invalid") $ do
                   True `shouldBe` True
           else do
-            it (show (_PurlType (_parsed_purl c)) ++ " of " ++ _input_purl c ++ " should be a known type") $
+            it (show (purlType (_parsed_purl c)) ++ " of " ++ _input_purl c ++ " should be a known type") $
               ((\case
                   Nothing -> True
-                  Just pt -> isTypeKnown pt) (_PurlType (_parsed_purl c))) `shouldBe` True
+                  Just pt -> isTypeKnown pt) (purlType (_parsed_purl c))) `shouldBe` True
             it (prefix ++ "should successfully parse " ++ (_input_purl c)) $ do
               parsedInputPurl `shouldNotBe` Nothing
             it (prefix ++ "should successfully parse " ++ (_canonical_purl c)) $ do
@@ -116,7 +116,7 @@ purlKnownTypeSpec kpt = let
       case parsedE of
         Just parsedE' -> do
           it (e ++ " should be a valid example for " ++ show pt) $ do
-            _PurlType parsedE' `shouldBe` (Just pt)
+            purlType parsedE' `shouldBe` (Just pt)
         _ -> do
           it (e ++ " should be parseable") $ do
             parsedE `shouldNotBe` Nothing
@@ -150,12 +150,12 @@ main = hspec $ do
         )
         purls
     it "it should decode Purl corectly" $ do
-      (_PurlType =<< (parsePurl "pkg:npm/%40angular/animation@12.3.1"))
+      (purlType =<< (parsePurl "pkg:npm/%40angular/animation@12.3.1"))
         `shouldBe` (Just (PurlType "npm"))
-      (_PurlNamespace =<< (parsePurl "pkg:npm/%40angular/animation@12.3.1"))
+      (purlNamespace =<< (parsePurl "pkg:npm/%40angular/animation@12.3.1"))
         `shouldBe` (Just "@angular")
-      (fmap _PurlName (parsePurl "pkg:npm/%40angular/animation@12.3.1"))
+      (fmap purlName (parsePurl "pkg:npm/%40angular/animation@12.3.1"))
         `shouldBe` (Just "animation")
-      (_PurlVersion =<< (parsePurl "pkg:npm/%40angular/animation@12.3.1"))
+      (purlVersion =<< (parsePurl "pkg:npm/%40angular/animation@12.3.1"))
         `shouldBe` (Just "12.3.1")
     purlTestSuite

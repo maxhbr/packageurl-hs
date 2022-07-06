@@ -35,20 +35,20 @@ purlTypeGeneric = PurlType "generic"
 normalisePurl :: Purl -> Purl
 normalisePurl =
   let
-    normalisePurlType (p@Purl { _PurlType = t }) = p { _PurlType = fmap (parsePurlType . show) t }
-    normalisePurlPaths (p@Purl { _PurlNamespace = ns, _PurlName = n, _PurlSubpath = sp })
-      = p { _PurlNamespace = fmap normalisePath ns
-          , _PurlName      = normalisePath n
+    normalisePurlType (p@Purl { purlType = t }) = p { purlType = fmap (parsePurlType . show) t }
+    normalisePurlPaths (p@Purl { purlNamespace = ns, purlName = n, purlSubpath = sp })
+      = p { purlNamespace = fmap normalisePath ns
+          , purlName      = normalisePath n
           }
-    normaliseSubpath (p@Purl { _PurlSubpath = sp }) = p{_PurlSubpath = fmap normalisePath sp}
-    normaliseQualifiers (p@Purl { _PurlQualifiers = q }) =
-      p { _PurlQualifiers = Map.mapKeys stringToLower q }
+    normaliseSubpath (p@Purl { purlSubpath = sp }) = p{purlSubpath = fmap normalisePath sp}
+    normaliseQualifiers (p@Purl { purlQualifiers = q }) =
+      p { purlQualifiers = Map.mapKeys stringToLower q }
     normaliserFromType :: PurlType -> Purl -> Purl
     normaliserFromType t = case t `Map.lookup` knownPurlTypeMap of
       Just kpt -> getKptNormalizer kpt
       Nothing -> id
     normaliseFromType :: Purl -> Purl
-    normaliseFromType (p@Purl { _PurlType = Just t }) = normaliserFromType t p
+    normaliseFromType (p@Purl { purlType = Just t }) = normaliserFromType t p
     normaliseFromType p = p
   in
     normaliseFromType
@@ -58,14 +58,14 @@ normalisePurl =
     . normalisePurlType
 
 isPurlValid :: Purl -> Bool
-isPurlValid (Purl { _PurlName = "" }) = False
-isPurlValid (Purl { _PurlType = Nothing }) = False
-isPurlValid (Purl { _PurlType = Just (PurlType "") }) = False
-isPurlValid (p@Purl {_PurlType = Just t}) = let
+isPurlValid (Purl { purlName = "" }) = False
+isPurlValid (Purl { purlType = Nothing }) = False
+isPurlValid (Purl { purlType = Just (PurlType "") }) = False
+isPurlValid (p@Purl {purlType = Just t}) = let
     validatorFromType = case t `Map.lookup` knownPurlTypeMap of
       Just kpt -> getKptValidator kpt
       Nothing -> const True
-    validatorForQualifiers (Purl {_PurlQualifiers = qs}) = all (all (\c -> and [Char.isAlpha c, Char.isLower c])) $ Map.keys qs
+    validatorForQualifiers (Purl {purlQualifiers = qs}) = all (all (\c -> and [Char.isAlpha c, Char.isLower c])) $ Map.keys qs
   in and [validatorFromType p, validatorForQualifiers p]
 
 parsePurl :: String -> Maybe Purl
@@ -142,7 +142,6 @@ instance A.ToJSON Purl where
     , "qualifiers" A..= qs
     , "subpath" A..= sp
     ]
-
 
 instance A.FromJSON Purl where
   parseJSON (A.String t) = case (parsePurl . T.unpack) t of
