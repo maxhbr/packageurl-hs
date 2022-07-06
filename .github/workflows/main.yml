@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: Maximilian Huber <oss@maximilian-huber.de>
+#
+# SPDX-License-Identifier: MIT
+
+name: build and test
+
+on:
+  push:
+  schedule:
+    - cron: "0 0 * * 1"
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        plan:
+          # - { resolver: "--resolver nightly" }
+          - { resolver: "" }
+
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+
+      - name: Setup stack
+        uses: mstksg/setup-stack@v2
+        env:
+          ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+
+      - name: Install dependencies
+        run: |
+          stack --no-terminal --install-ghc $ARGS test --bench --only-dependencies
+        env:
+          ARGS: ${{ matrix.plan.resolver }}
+
+      - name: Build
+        run: |
+          stack --no-terminal $ARGS test --bench --no-run-benchmarks --haddock --no-haddock-deps
+        env:
+          ARGS: ${{ matrix.plan.resolver }}
