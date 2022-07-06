@@ -25,8 +25,8 @@ import qualified Network.URI                   as URI
 import qualified Network.URI.Encode            as URI
 import qualified System.FilePath               as FP
 
-import           Purl.Purl.Internal
-import           Purl.Purl.Internal as X hiding (stringToLower, normalisePath)
+import Purl.Purl.Helper
+import           Purl.Purl.Internal as X
 import           Purl.Purl.KnownTypes as X
 
 purlTypeGeneric :: PurlType

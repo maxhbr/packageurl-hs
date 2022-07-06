@@ -31,6 +31,7 @@ import qualified Network.URI.Encode            as URI
 import qualified System.FilePath               as FP
 import Text.RawString.QQ
 
+import Purl.Purl.Helper
 import           Purl.Purl.Internal
 
 data KnownPurlType
@@ -55,27 +56,6 @@ addQualifierDefaults :: [(String,String)] -> KnownPurlType -> KnownPurlType
 addQualifierDefaults qds kpt = kpt{getKptQualifierDefaults = (getKptQualifierDefaults kpt) <> Map.fromList qds}
 addDescription :: String -> KnownPurlType -> KnownPurlType
 addDescription d kpt = kpt{getKptDescription = d} 
-
--- data KnownPurlType
---   = KPT PurlType
---   | DefaultRepository String KnownPurlType
---   | AddNormalizer (Purl -> Purl) KnownPurlType
---   | AddValidator (Purl -> Bool) KnownPurlType
---   | AddDescription String KnownPurlType
--- unpack1KPT :: KnownPurlType -> Either PurlType KnownPurlType
--- unpack1KPT (KPT pt) = Left pt
--- unpack1KPT (DefaultRepository _ kpt) = Right kpt
--- unpack1KPT (AddNormalizer _ kpt) = Right kpt
--- unpack1KPT (AddValidator _ kpt) = Right kpt
--- unpack1KPT (AddDescription _ kpt) = Right kpt
--- unpackKPT :: KnownPurlType -> PurlType
--- unpackKPT kpt = case unpack1KPT kpt of
---   Left pt -> pt
---   Right kpt' -> unpackKPT kpt'
-
-
--- mkKPT :: String -> (KnownPurlType -> KnownPurlType) -> String -> KnownPurlType
--- mkKPT t f desc = f (AddDescription desc (KPT (PurlType t)))
 
 namespaceCaseInsensitive =
   let namespacesToLowercase (p@Purl { purlNamespace = namespace })

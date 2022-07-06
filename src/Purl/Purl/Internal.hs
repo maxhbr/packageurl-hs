@@ -26,12 +26,7 @@ import qualified Network.URI                   as URI
 import qualified Network.URI.Encode            as URI
 import qualified System.FilePath               as FP
 
-stringToLower :: String -> String
-stringToLower = map Char.toLower
-
-normalisePath :: FilePath -> FilePath
-normalisePath ('/' : path) = normalisePath path
-normalisePath path         = (FP.normalise . FP.dropTrailingPathSeparator) path
+import Purl.Purl.Helper
 
 newtype PurlType
   = PurlType String
