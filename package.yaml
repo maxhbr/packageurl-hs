@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 name:                packageurl
-version:             0.1.0.0
+version:             0.2.0.0
 github:              "maxhbr/packageurl"
 license:             BSD3
 author:              "Maximillian Huber"
