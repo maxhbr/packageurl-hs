@@ -22,11 +22,13 @@ description:         Please see the README on GitHub at <https://github.com/maxh
 dependencies:
 - base >= 4.7 && < 5
 - aeson
+- containers
 - filepath
 - network-uri
 - split
 - text
 - uri-encode
+- raw-strings-qq
 
 library:
   source-dirs: src
@@ -43,3 +45,8 @@ tests:
     - packageurl
     - hspec
     - QuickCheck
+
+    - aeson
+    - bytestring
+    - containers
+    - file-embed
