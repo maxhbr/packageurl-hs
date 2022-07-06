@@ -25,7 +25,9 @@ source-repository head
 
 library
   exposed-modules:
-      PURL.PURL
+      Purl.Purl
+      Purl.Purl.Internal
+      Purl.Purl.KnownTypes
   other-modules:
       Paths_packageurl
   hs-source-dirs:
@@ -33,8 +35,10 @@ library
   build-depends:
       aeson
     , base >=4.7 && <5
+    , containers
     , filepath
     , network-uri
+    , raw-strings-qq
     , split
     , text
     , uri-encode
@@ -53,11 +57,13 @@ test-suite packageurl-test
     , aeson
     , base >=4.7 && <5
     , bytestring
+    , containers
     , file-embed
     , filepath
     , hspec
     , network-uri
     , packageurl
+    , raw-strings-qq
     , split
     , text
     , uri-encode

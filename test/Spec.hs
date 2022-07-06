@@ -3,14 +3,22 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 
+import qualified Data.Aeson                    as A
+import qualified Data.Aeson.Types              as A
+import qualified Data.ByteString.Lazy          as B
+import Data.Char (isSpace)
 import           Data.FileEmbed                 ( embedFile )
-import           Data.Maybe                     ( fromJust, fromMaybe )
+import           Data.List                      ( intercalate, isPrefixOf )
+import qualified Data.Map                      as Map
+import           Data.Maybe                     ( fromJust
+                                                , fromMaybe
+                                                , isJust
+                                                )
 import           Test.Hspec
 import           Test.QuickCheck
-import qualified Data.Aeson                    as A
-import qualified Data.ByteString.Lazy          as B
 
-import           PURL.PURL
+import           Purl.Purl.Internal (normalisePath, stringToLower)
+import           Purl.Purl
 
 
 
@@ -18,8 +26,8 @@ npmPurl = "pkg:npm/%40angular/animation@12.3.1"
 purls =
   [ "pkg:bitbucket/birkenfeld/pygments-main@244fd47e07d1014f0aed9c"
   , "pkg:deb/debian/curl@7.50.3-1?arch=i386&distro=jessie"
---   , "pkg:docker/cassandra@sha256:244fd47e07d1004f0aed9c"
---   , "pkg:docker/customer/dockerimage@sha256:244fd47e07d1004f0aed9c?repository_url=gcr.io"
+  , "pkg:docker/cassandra@sha256%3A244fd47e07d1004f0aed9c"
+  , "pkg:docker/customer/dockerimage@sha256%3A244fd47e07d1004f0aed9c?repository_url=gcr.io"
   , "pkg:gem/jruby-launcher@1.1.2?platform=java"
   , "pkg:gem/ruby-advisory-db-check@0.12.4"
   , "pkg:github/package-url/purl-spec@244fd47e07d1004f0aed9c"
@@ -34,31 +42,26 @@ purls =
   , "pkg:rpm/opensuse/curl@7.56.1-1.1.?arch=i386&distro=opensuse-tumbleweed"
   ]
 
-data TestSuiteCase
-  = TestSuiteCase
-  { _desrciption :: String
-  , _input_purl :: String
+data TestSuiteCase = TestSuiteCase
+  { _desrciption    :: String
+  , _input_purl     :: String
   , _canonical_purl :: String
-  , _parsed_purl :: PURL
-  , _is_invalid :: Bool
-  } deriving (Show)
+  , _parsed_purl    :: Purl
+  , _is_invalid     :: Bool
+  }
+  deriving Show
 instance A.FromJSON TestSuiteCase where
   parseJSON = A.withObject "TestSuiteCase" $ \c -> do
-    ty <- c A..:? "type"
-    ns <- c A..:? "namespace"
-    n <- ("$null" `fromMaybe`) <$> c A..:? "name"
-    v <- c A..:? "version"
-    -- q <- c A..:? "qualifiers"
-    let q' = Nothing
-    s <- c A..:? "subpath"
-
-    TestSuiteCase <$> c A..: "description"
-                   <*> c A..: "purl"
-                   <*> (("$null" `fromMaybe`) <$> c A..:?"canonical_purl")
-                   <*> (pure (PURL (Just defaultPurlScheme) ty ns n v q' s))
-                   <*> c A..: "is_invalid"
-
-
+    nameIsNotNull <- isJust <$> (c A..:? "name" :: A.Parser (Maybe String))
+    TestSuiteCase
+      <$>  c
+      A..: "description"
+      <*>  c
+      A..: "purl"
+      <*>  (("$null" `fromMaybe`) <$> c A..:? "canonical_purl")
+      <*>  (if nameIsNotNull then A.parseJSON (A.Object c) else pure undefined)
+      <*>  c
+      A..: "is_invalid"
 
 purlTestSuite =
   let testSuiteData :: B.ByteString
@@ -67,36 +70,92 @@ purlTestSuite =
           $(embedFile "purl-spec/test-suite-data.json")
   in case A.eitherDecode testSuiteData :: Either String [TestSuiteCase] of
     Right cs -> mapM_ (\c -> do
-        it ((_desrciption c) ++ ": " ++ (_input_purl c)) $ 
-          if (_is_invalid c)
+        let parsedInputPurl = parsePurl (_input_purl c)
+        let prefix = "[" ++ _input_purl c ++ "]: " ++ _desrciption c ++ ": "
+        if (_is_invalid c)
           then do
-            parsePURL (_input_purl c) `shouldBe` Nothing
+            case parsedInputPurl of
+              Just p -> it (prefix ++ "should be invalid: " ++ (show p)) $ do
+                 not (isPurlValid p)
+
+              Nothing ->
+                it (prefix ++ "should be invalid") $ do
+                  True `shouldBe` True
           else do
-            let parsedInputPurl = parsePURL (_input_purl c)
-            parsedInputPurl `shouldNotBe` Nothing
-            parsePURL (_canonical_purl c) `shouldNotBe` Nothing
-            parsedInputPurl `shouldBe` (Just (_parsed_purl c))
+            it (show (_PurlType (_parsed_purl c)) ++ " of " ++ _input_purl c ++ " should be a known type") $
+              ((\case
+                  Nothing -> True
+                  Just pt -> isTypeKnown pt) (_PurlType (_parsed_purl c))) `shouldBe` True
+            it (prefix ++ "should successfully parse " ++ (_input_purl c)) $ do
+              parsedInputPurl `shouldNotBe` Nothing
+            it (prefix ++ "should successfully parse " ++ (_canonical_purl c)) $ do
+              parsePurl (_canonical_purl c) `shouldNotBe` Nothing
+            case parsedInputPurl of
+              Just parsedInputPurl' -> do
+                it (prefix ++ "provided parsed should match ") $ do
+                  normalisePurl parsedInputPurl' `shouldBe` normalisePurl (_parsed_purl c)
       ) cs
     Left err -> it "fail on failure of parsing :)" $ do
       err `shouldBe` ""
 
+purlKnownTypeSpec kpt = let
+    pt = getKptPurlType kpt
+    desc = getKptDescription kpt
+    examplesFromDescription = (map (dropWhile isSpace) . filter ("      pkg:" `isPrefixOf`) . lines) desc
+  in do
+    it (show pt ++ " should be in description") $ do
+      desc `shouldContain` show pt
+    case getKptDefaultRepository kpt of
+      Just d -> it (d ++ " should be in description") $ do
+        desc `shouldContain` d
+      Nothing -> pure ()
+    it ("there should be examples for " ++ show pt) $ do
+      length examplesFromDescription > 0 `shouldBe` True
+    mapM_ (\e -> do
+      let parsedE = parsePurl e
+      case parsedE of
+        Just parsedE' -> do
+          it (e ++ " should be a valid example for " ++ show pt) $ do
+            _PurlType parsedE' `shouldBe` (Just pt)
+        _ -> do
+          it (e ++ " should be parseable") $ do
+            parsedE `shouldNotBe` Nothing
+      ) examplesFromDescription
+
+purlTypesSpec = 
+  describe "PurlType" $ do
+    mapM_ ( purlKnownTypeSpec) knownPurlTypes
+
 main :: IO ()
-main = hspec $ describe "PURL" $ do
-  it "all example puls should be paseable" $ do
-    mapM_ (\purl -> parsePURL purl `shouldNotBe` Nothing) purls
-  it "all example puls should adhere some identity" $ do
-    mapM_
-      (\purl -> do
-        (show . fromJust . parsePURL) purl `shouldBe` purl
-      )
-      purls
-  it "it should decode PURL corectly" $ do
-    (_PURL_type =<< (parsePURL "pkg:npm/%40angular/animation@12.3.1"))
-      `shouldBe` (Just PURL_TypeNPM)
-    (_PURL_namespace =<< (parsePURL "pkg:npm/%40angular/animation@12.3.1"))
-      `shouldBe` (Just "@angular")
-    (fmap _PURL_name (parsePURL "pkg:npm/%40angular/animation@12.3.1"))
-      `shouldBe` (Just "animation")
-    (_PURL_version =<< (parsePURL "pkg:npm/%40angular/animation@12.3.1"))
-      `shouldBe` (Just "12.3.1")
-  purlTestSuite
+main = hspec $ do
+  purlTypesSpec
+  describe "Purl" $ do
+    it "path normalization should work as expected" $ do
+      mapM_
+        (\(raw, normal) -> normalisePath raw `shouldBe` normal)
+        [ ("test/some/normal/path", "test/some/normal/path")
+        , ("test/some//path"      , "test/some/path")
+        , ("test/some///path"     , "test/some/path")
+        , ("/test/some/path"      , "test/some/path")
+        , ("//test/some/path"     , "test/some/path")
+        , ("///test/some/path"    , "test/some/path")
+        , ("test/some/path/"      , "test/some/path")
+        ]
+    it "all example puls should be paseable" $ do
+      mapM_ (\purl -> parsePurl purl `shouldNotBe` Nothing) purls
+    it "all example puls should adhere some identity" $ do
+      mapM_
+        (\purl -> do
+          (show . fromJust . parsePurl) purl `shouldBe` purl
+        )
+        purls
+    it "it should decode Purl corectly" $ do
+      (_PurlType =<< (parsePurl "pkg:npm/%40angular/animation@12.3.1"))
+        `shouldBe` (Just (PurlType "npm"))
+      (_PurlNamespace =<< (parsePurl "pkg:npm/%40angular/animation@12.3.1"))
+        `shouldBe` (Just "@angular")
+      (fmap _PurlName (parsePurl "pkg:npm/%40angular/animation@12.3.1"))
+        `shouldBe` (Just "animation")
+      (_PurlVersion =<< (parsePurl "pkg:npm/%40angular/animation@12.3.1"))
+        `shouldBe` (Just "12.3.1")
+    purlTestSuite
