@@ -176,4 +176,7 @@ instance A.FromJSON Purl where
             <*>   o
             A..:? "subpath"
           pure purl
-  parseJSON _ = undefined -- TODO
+  parseJSON (A.Array _) = fail "can not parse Array to Purl"
+  parseJSON (A.Number _) = fail "can not parse Number to Purl"
+  parseJSON (A.Bool _) = fail "can not parse Bool to Purl"
+  parseJSON (A.Null) = fail "can not parse Null to Purl"
