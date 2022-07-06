@@ -1,0 +1,11 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Source: https://github.com/opossum-tool/opossumUI
+
+Files: *.lock
+       packageurl.cabal
+Copyright: $GENERATED
+License: CC0-1.0
+
+Files: purl-spec/*
+Copyright: the purl authors
+License: MIT

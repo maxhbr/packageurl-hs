@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Maximilian Huber <oss@maximilian-huber.de>
 #
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: BSD-3-Clause
 
 name: REUSE Compliance Check
 
