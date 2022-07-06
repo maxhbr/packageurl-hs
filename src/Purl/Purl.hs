@@ -4,12 +4,14 @@
 
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Purl.Purl
   ( module X
   , purlTypeGeneric
   , normalisePurl
   , isPurlValid
+  , parsePurlQualifiers
   , parsePurl
   ) where
 
@@ -72,6 +74,27 @@ isPurlValid (p@Purl {purlType = Just t}) = let
     validatorForQualifiers (Purl {purlQualifiers = qs}) = all (all (\c -> and [Char.isAlpha c, Char.isLower c])) $ Map.keys qs
   in and [validatorFromType p, validatorForQualifiers p]
 
+parsePurlQualifiers :: String -> Map.Map String String
+parsePurlQualifiers = let
+          parseQualifiersFindKey accum ('=' : qs') =
+            parseQualifiersFindValue accum "" qs'
+          parseQualifiersFindKey accum ('&' : qs') =
+            (accum, "") : (parseQualifiersFindKey "" qs')
+          parseQualifiersFindKey accum (c : qs') =
+            parseQualifiersFindKey (accum ++ [c]) qs'
+          parseQualifiersFindKey ""    [] = []
+          parseQualifiersFindKey accum [] = (accum, "") : []
+          parseQualifiersFindValue key accum ('&' : qs') =
+            (key, URI.decode accum) : (parseQualifiersFindKey "" qs')
+          parseQualifiersFindValue key accum (c : qs') =
+            (parseQualifiersFindValue key (accum ++ [c]) qs')
+          parseQualifiersFindValue key accum [] = (key, URI.decode accum) : []
+        in
+          \case
+            ""         -> mempty
+            ('?' : qs) -> Map.fromList $ parseQualifiersFindKey "" qs
+            qs -> Map.fromList $ parseQualifiersFindKey "" qs
+
 parsePurl :: String -> Maybe Purl
 parsePurl ('p' : 'k' : 'g' : ':' : '/' : rest) = parsePurl ("pkg:" ++ rest)
 parsePurl uriStr                               = case URI.parseURI uriStr of
@@ -104,25 +127,7 @@ parsePurl uriStr                               = case URI.parseURI uriStr of
               let (t, ns) = prefixToTypeAndNamespace prefix
               in  (t, ns, parseNameAndVersion pNameAndVersion)
 
-      pQualifier =
-        let
-          parseQualifiersFindKey accum ('=' : qs') =
-            parseQualifiersFindValue accum "" qs'
-          parseQualifiersFindKey accum ('&' : qs') =
-            (accum, "") : (parseQualifiersFindKey "" qs')
-          parseQualifiersFindKey accum (c : qs') =
-            parseQualifiersFindKey (accum ++ [c]) qs'
-          parseQualifiersFindKey ""    [] = []
-          parseQualifiersFindKey accum [] = (accum, "") : []
-          parseQualifiersFindValue key accum ('&' : qs') =
-            (key, URI.decode accum) : (parseQualifiersFindKey "" qs')
-          parseQualifiersFindValue key accum (c : qs') =
-            (parseQualifiersFindValue key (accum ++ [c]) qs')
-          parseQualifiersFindValue key accum [] = (key, URI.decode accum) : []
-        in
-          case URI.uriQuery uri of
-            ""         -> mempty
-            ('?' : qs) -> Map.fromList $ parseQualifiersFindKey "" qs
+      pQualifier = parsePurlQualifiers (URI.uriQuery uri)
       pSubpath = case (URI.uriFragment uri) of
         ""       -> Nothing
         fragment -> Just (tail fragment)
