@@ -30,7 +30,7 @@ import qualified Network.URI                   as URI
 import qualified Network.URI.Encode            as URI
 import qualified System.FilePath               as FP
 
-import Purl.Purl.Helper
+import           Purl.Purl.Helper
 
 newtype PurlType
   = PurlType String

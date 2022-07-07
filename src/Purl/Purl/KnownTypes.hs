@@ -10,7 +10,7 @@
 {-# LANGUAGE LambdaCase #-}
 
 module Purl.Purl.KnownTypes
-  ( KnownPurlType (..)
+  ( KnownPurlType(..)
   , knownPurlTypes
   , knownPurlTypeMap
   , isTypeKnown
@@ -24,8 +24,8 @@ import           Data.List.Split                ( splitOn )
 import qualified Data.Map                      as Map
 import qualified Data.Map                      as Map
 import           Data.Maybe                     ( fromMaybe
-                                                , maybeToList
                                                 , isNothing
+                                                , maybeToList
                                                 )
 import qualified Data.String                   as String
 import qualified Data.Text                     as T
@@ -34,64 +34,71 @@ import           GHC.Generics                   ( Generic )
 import qualified Network.URI                   as URI
 import qualified Network.URI.Encode            as URI
 import qualified System.FilePath               as FP
-import Text.RawString.QQ
+import           Text.RawString.QQ
 
-import Purl.Purl.Helper
+import           Purl.Purl.Helper
 import           Purl.Purl.Internal
 
-data KnownPurlType
-  = KPT
-  { getKptPurlType :: PurlType
+data KnownPurlType = KPT
+  { getKptPurlType          :: PurlType
   , getKptDefaultRepository :: Maybe String
-  , getKptNormalizer :: Purl -> Purl
-  , getKptValidator :: Purl -> Bool
+  , getKptNormalizer        :: Purl -> Purl
+  , getKptValidator         :: Purl -> Bool
   , getKptQualifierDefaults :: Map.Map String String
-  , getKptDescription :: String
+  , getKptDescription       :: String
   }
 mkKPT :: String -> (KnownPurlType -> KnownPurlType) -> String -> KnownPurlType
-mkKPT t f description = f $ KPT (PurlType t) Nothing id (const True) mempty description
+mkKPT t f description =
+  f $ KPT (PurlType t) Nothing id (const True) mempty description
 
 defaultRepository :: String -> KnownPurlType -> KnownPurlType
-defaultRepository r kpt = kpt{getKptDefaultRepository = Just r}
+defaultRepository r kpt = kpt { getKptDefaultRepository = Just r }
 addNormalizer :: (Purl -> Purl) -> KnownPurlType -> KnownPurlType
-addNormalizer n kpt = kpt{getKptNormalizer = n . (getKptNormalizer kpt) } 
+addNormalizer n kpt = kpt { getKptNormalizer = n . (getKptNormalizer kpt) }
 addValidator :: (Purl -> Bool) -> KnownPurlType -> KnownPurlType
-addValidator v kpt = kpt{getKptValidator = \p -> and [v p, getKptValidator kpt p]} 
-addQualifierDefaults :: [(String,String)] -> KnownPurlType -> KnownPurlType
-addQualifierDefaults qds kpt = kpt{getKptQualifierDefaults = (getKptQualifierDefaults kpt) <> Map.fromList qds}
+addValidator v kpt =
+  kpt { getKptValidator = \p -> and [v p, getKptValidator kpt p] }
+addQualifierDefaults :: [(String, String)] -> KnownPurlType -> KnownPurlType
+addQualifierDefaults qds kpt = kpt
+  { getKptQualifierDefaults = (getKptQualifierDefaults kpt) <> Map.fromList qds
+  }
 addDescription :: String -> KnownPurlType -> KnownPurlType
-addDescription d kpt = kpt{getKptDescription = d} 
+addDescription d kpt = kpt { getKptDescription = d }
 
 namespaceCaseInsensitive =
-  let namespacesToLowercase (p@Purl { purlNamespace = namespace })
-        = p { purlNamespace = fmap stringToLower namespace }
+  let namespacesToLowercase (p@Purl { purlNamespace = namespace }) =
+        p { purlNamespace = fmap stringToLower namespace }
   in  addNormalizer namespacesToLowercase
 
 nameCaseInsensitive =
-  let namesToLowercase (p@Purl { purlName = name })
-        = p { purlName      = stringToLower name }
+  let namesToLowercase (p@Purl { purlName = name }) =
+        p { purlName = stringToLower name }
   in  namespaceCaseInsensitive . (addNormalizer namesToLowercase)
 
 namespaceMandatory =
   let namespaceMandatoryFun (p@Purl { purlNamespace = Nothing }) = False
       namespaceMandatoryFun (p@Purl { purlNamespace = Just "" }) = False
-      namespaceMandatoryFun (p@Purl { purlNamespace = _ }) = True
+      namespaceMandatoryFun (p@Purl { purlNamespace = _ }      ) = True
   in  addValidator namespaceMandatoryFun
 
 noNamespace =
-  let noNamespaceFun (p@Purl {purlNamespace = ns}) = isNothing ns
+  let noNamespaceFun (p@Purl { purlNamespace = ns }) = isNothing ns
   in  addValidator noNamespaceFun
 
 versionMandatory =
-  let versionMandatoryFun (p@Purl {purlVersion = Nothing}) = False
-      versionMandatoryFun (p@Purl {purlVersion = Just ""}) = False
-      versionMandatoryFun (p@Purl {purlVersion = _}) = False
+  let versionMandatoryFun (p@Purl { purlVersion = Nothing }) = False
+      versionMandatoryFun (p@Purl { purlVersion = Just "" }) = False
+      versionMandatoryFun (p@Purl { purlVersion = _ }      ) = False
   in  addValidator versionMandatoryFun
 
 knownPurlTypes =
-  [ mkKPT "bitbucket"
-          (defaultRepository "https://bitbucket.org" . nameCaseInsensitive . namespaceMandatory)
-          [r|
+  [ mkKPT
+    "bitbucket"
+    ( defaultRepository "https://bitbucket.org"
+    . nameCaseInsensitive
+    . namespaceMandatory
+    )
+    [r|
 bitbucket
 ---------
 ``bitbucket`` for Bitbucket-based packages:
@@ -105,8 +112,10 @@ bitbucket
 
       pkg:bitbucket/birkenfeld/pygments-main@244fd47e07d1014f0aed9c
 |]
-  , mkKPT "cocoapods" (defaultRepository "https://cdn.cocoapods.org/")
-          [r|
+  , mkKPT
+    "cocoapods"
+    (defaultRepository "https://cdn.cocoapods.org/")
+    [r|
 cocoapods
 ---------
 ``cocoapods`` for Cocoapods:
@@ -121,8 +130,10 @@ cocoapods
       pkg:cocoapods/ShareKit@2.0#Twitter
       pkg:cocoapods/GoogleUtilities@7.5.2#NSData+zlib
 |]
-  , mkKPT "cargo" (defaultRepository "https://crates.io/")
-          [r|
+  , mkKPT
+    "cargo"
+    (defaultRepository "https://crates.io/")
+    [r|
 cargo
 -----
 ``cargo`` for Rust:
@@ -135,8 +146,10 @@ cargo
       pkg:cargo/clap@2.33.0
       pkg:cargo/structopt@0.3.11
 |]
-  , mkKPT "composer" (defaultRepository "https://packagist.org")
-          [r|
+  , mkKPT
+    "composer"
+    (defaultRepository "https://packagist.org")
+    [r|
 composer
 --------
 ``composer`` for Composer PHP packages:
@@ -149,15 +162,21 @@ composer
 
       pkg:composer/laravel/laravel@5.5.0
 |]
-  , mkKPT "conan" (defaultRepository "https://center.conan.io" . addValidator (let
-      hasChannelQualifier (Purl{purlQualifiers = qs}) = case "channel" `Map.lookup` qs of
-        Just "" -> False
-        Nothing -> False
-        _       -> True
-    in \case
-          (p@(Purl{purlNamespace = Just _})) -> hasChannelQualifier p
-          (p@(Purl{purlNamespace = Nothing})) -> not $ hasChannelQualifier p))
-          [r|
+  , mkKPT
+    "conan"
+    (defaultRepository "https://center.conan.io" . addValidator
+      (let hasChannelQualifier (Purl { purlQualifiers = qs }) =
+             case "channel" `Map.lookup` qs of
+               Just "" -> False
+               Nothing -> False
+               _       -> True
+       in  \case
+             (p@(Purl { purlNamespace = Just _ })) -> hasChannelQualifier p
+             (p@(Purl { purlNamespace = Nothing })) ->
+               not $ hasChannelQualifier p
+      )
+    )
+    [r|
 conan
 -----
 ``conan`` for Conan C/C++ packages:
@@ -172,8 +191,10 @@ conan
       pkg:conan/cctz@2.3
       pkg:conan/bincrafters/cctz@2.3?channel=stable
 |]
-  , mkKPT "conda" (defaultRepository "https://repo.anaconda.com")
-          [r|
+  , mkKPT
+    "conda"
+    (defaultRepository "https://repo.anaconda.com")
+    [r|
 conda
 -----
 ``conda`` for Conda packages:
@@ -189,8 +210,10 @@ conda
 
       pkg:conda/absl-py@0.4.1?build=py36h06a4308_0&channel=main&subdir=linux-64&type=tar.bz2
 |]
-  , mkKPT "cran" (defaultRepository "https://cran.r-project.org" . versionMandatory)
-          [r|
+  , mkKPT
+    "cran"
+    (defaultRepository "https://cran.r-project.org" . versionMandatory)
+    [r|
 cran
 -----
 ``cran`` for CRAN R packages:
@@ -204,8 +227,10 @@ cran
       pkg:cran/rJava@1.0-4
       pkg:cran/caret@6.0-88
 |]
-  , mkKPT "deb" (nameCaseInsensitive)
-          [r|
+  , mkKPT
+    "deb"
+    (nameCaseInsensitive)
+    [r|
 deb
 ---
 ``deb`` for Debian, Debian derivatives, and Ubuntu packages:
@@ -233,8 +258,10 @@ deb
       pkg:deb/debian/attr@1:2.4.47-2?arch=source
       pkg:deb/debian/attr@1:2.4.47-2%2Bb1?arch=amd64
 |]
-  , mkKPT "docker" (defaultRepository "https://hub.docker.com")
-          [r|
+  , mkKPT
+    "docker"
+    (defaultRepository "https://hub.docker.com")
+    [r|
 docker
 ------
 ``docker`` for Docker images
@@ -249,8 +276,12 @@ docker
       pkg:docker/smartentry/debian@dc437cc87d10
       pkg:docker/customer/dockerimage@sha256%3A244fd47e07d10?repository_url=gcr.io
 |]
-  , mkKPT "gem" (defaultRepository "https://rubygems.org" . addQualifierDefaults [("platform", "ruby")])
-          [r|
+  , mkKPT
+    "gem"
+    ( defaultRepository "https://rubygems.org"
+    . addQualifierDefaults [("platform", "ruby")]
+    )
+    [r|
 gem
 ---
 ``gem`` for Rubygems:
@@ -263,8 +294,10 @@ gem
       pkg:gem/ruby-advisory-db-check@0.12.4
       pkg:gem/jruby-launcher@1.1.2?platform=java
 |]
-  , mkKPT "generic" (id)
-          [r|
+  , mkKPT
+    "generic"
+    (id)
+    [r|
 generic
 -------
 ``generic`` for plain, generic packages that do not fit anywhere else such as
@@ -284,8 +317,10 @@ version control repository such as a bare git repo.
       pkg:generic/openssl@1.1.10g?download_url=https://openssl.org/source/openssl-1.1.0g.tar.gz&checksum=sha256:de4d501267da
       pkg:generic/bitwarderl?vcs_url=git%2Bhttps://git.fsfe.org/dxtr/bitwarderl%40cc55108da32
 |]
-  , mkKPT "github" (defaultRepository "https://github.com" . nameCaseInsensitive)
-          [r|
+  , mkKPT
+    "github"
+    (defaultRepository "https://github.com" . nameCaseInsensitive)
+    [r|
 github
 ------
 ``github`` for Github-based packages:
@@ -301,8 +336,10 @@ github
       pkg:github/package-url/purl-spec@244fd47e07d1004
       pkg:github/package-url/purl-spec@244fd47e07d1004#everybody/loves/dogs
 |]
-  , mkKPT "golang" (nameCaseInsensitive)
-          [r|
+  , mkKPT
+    "golang"
+    (nameCaseInsensitive)
+    [r|
 golang
 ------
 ``golang`` for Go packages
@@ -319,8 +356,10 @@ golang
       pkg:golang/google.golang.org/genproto#googleapis/api/annotations
       pkg:golang/github.com/gorilla/context@234fd47e07d1004f0aed9c#api
 |]
-  , mkKPT "hackage" (defaultRepository "https://hackage.haskell.org")
-          [r|
+  , mkKPT
+    "hackage"
+    (defaultRepository "https://hackage.haskell.org")
+    [r|
 hackage
 -------
 ``hackage`` for Haskell packages
@@ -334,8 +373,10 @@ hackage
       pkg:hackage/AC-HalfInteger@1.2.1
       pkg:hackage/3d-graphics-examples@0.0.0.2
 |]
-  , mkKPT "hex" (defaultRepository "https://repo.hex.pm" . nameCaseInsensitive)
-          [r|
+  , mkKPT
+    "hex"
+    (defaultRepository "https://repo.hex.pm" . nameCaseInsensitive)
+    [r|
 hex
 ---
 ``hex`` for Hex packages
@@ -351,8 +392,10 @@ hex
       pkg:hex/phoenix_html@2.13.3#priv/static/phoenix_html.js
       pkg:hex/bar@1.2.3?repository_url=https://myrepo.example.com
 |]
-  , mkKPT "maven" (defaultRepository "https://repo.maven.apache.org/maven2")
-          [r|
+  , mkKPT
+    "maven"
+    (defaultRepository "https://repo.maven.apache.org/maven2")
+    [r|
 maven
 -----
 ``maven`` for Maven JARs and related artifacts
@@ -373,8 +416,10 @@ maven
       pkg:maven/net.sf.jacob-projec/jacob@1.14.3?classifier=x86&type=dll
       pkg:maven/net.sf.jacob-projec/jacob@1.14.3?classifier=x64&type=dll
 |]
-  , mkKPT "npm" (defaultRepository "https://registry.npmjs.org" . nameCaseInsensitive)
-          [r|
+  , mkKPT
+    "npm"
+    (defaultRepository "https://registry.npmjs.org" . nameCaseInsensitive)
+    [r|
 npm
 ---
 ``npm`` for Node NPM packages:
@@ -389,8 +434,10 @@ npm
       pkg:npm/%40angular/animation@12.3.1
       pkg:npm/mypackage@12.4.5?vcs_url=git://host.com/path/to/repo.git%404345abcd34343
 |]
-  , mkKPT "nuget" (defaultRepository "https://www.nuget.org" . noNamespace)
-          [r|
+  , mkKPT
+    "nuget"
+    (defaultRepository "https://www.nuget.org" . noNamespace)
+    [r|
 nuget
 -----
 ``nuget`` for NuGet .NET packages:
@@ -402,8 +449,10 @@ nuget
 
       pkg:nuget/EnterpriseLibrary.Common@6.0.1304
 |]
-  , mkKPT "oci" (nameCaseInsensitive . noNamespace)
-          [r|
+  , mkKPT
+    "oci"
+    (nameCaseInsensitive . noNamespace)
+    [r|
 oci
 ------------
 ``oci`` for all artifacts stored in registries that conform to the
@@ -434,8 +483,10 @@ including container images built by Docker and others:
       pkg:oci/static@sha256%3A244fd47e07d10?repository_url=gcr.io/distroless/static&tag=latest
       pkg:oci/hello-wasm@sha256%3A244fd47e07d10?tag=v1
 |]
-  , mkKPT "pub" (defaultRepository "https://pub.dartlang.org" . nameCaseInsensitive) -- TODO: only allowed chars are [a-z0-9_]
-          [r|
+  , mkKPT
+    "pub"
+    (defaultRepository "https://pub.dartlang.org" . nameCaseInsensitive) -- TODO: only allowed chars are [a-z0-9_]
+    [r|
 pub
 ----
 ``pub`` for Dart and Flutter packages:
@@ -448,10 +499,20 @@ pub
       pkg:pub/characters@1.2.0
       pkg:pub/flutter@0.0.0
 |]
-  , mkKPT "pypi" (defaultRepository "https://pypi.python.org" . nameCaseInsensitive . addNormalizer (let
-      underscoreToDash = map (\c -> if c == '_' then '-' else c)
-    in (\p@Purl {purlNamespace = ns, purlName = n} -> p {purlNamespace = fmap underscoreToDash ns, purlName = underscoreToDash n })))
-          [r|
+  , mkKPT
+    "pypi"
+    ( defaultRepository "https://pypi.python.org"
+    . nameCaseInsensitive
+    . addNormalizer
+        (let underscoreToDash = map (\c -> if c == '_' then '-' else c)
+         in  (\p@Purl { purlNamespace = ns, purlName = n } -> p
+               { purlNamespace = fmap underscoreToDash ns
+               , purlName      = underscoreToDash n
+               }
+             )
+        )
+    )
+    [r|
 pypi
 ----
 ``pypi`` for Python packages:
@@ -465,8 +526,10 @@ pypi
       pkg:pypi/django@1.11.1
       pkg:pypi/django-allauth@12.23
 |]
-  , mkKPT "rpm" (namespaceCaseInsensitive)
-          [r|
+  , mkKPT
+    "rpm"
+    (namespaceCaseInsensitive)
+    [r|
 rpm
 ---
 ``rpm`` for RPMs:
@@ -488,8 +551,10 @@ rpm
       pkg:rpm/fedora/curl@7.50.3-1.fc25?arch=i386&distro=fedora-25
       pkg:rpm/centerim@4.22.10-1.el6?arch=i686&epoch=1&distro=fedora-25
 |]
-  , mkKPT "swift" (namespaceMandatory . versionMandatory)
-          [r|
+  , mkKPT
+    "swift"
+    (namespaceMandatory . versionMandatory)
+    [r|
 swift
 -----
 ``swift`` for Swift packages:
@@ -506,7 +571,8 @@ swift
   ]
 
 knownPurlTypeMap :: Map.Map PurlType KnownPurlType
-knownPurlTypeMap = (Map.fromList . map (\ptm -> (getKptPurlType ptm, ptm))) knownPurlTypes
+knownPurlTypeMap =
+  (Map.fromList . map (\ptm -> (getKptPurlType ptm, ptm))) knownPurlTypes
 
 isTypeKnown :: PurlType -> Bool
 isTypeKnown = (`Map.member` knownPurlTypeMap)

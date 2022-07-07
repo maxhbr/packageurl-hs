@@ -10,9 +10,11 @@
 import qualified Data.Aeson                    as A
 import qualified Data.Aeson.Types              as A
 import qualified Data.ByteString.Lazy          as B
-import Data.Char (isSpace)
+import           Data.Char                      ( isSpace )
 import           Data.FileEmbed                 ( embedFile )
-import           Data.List                      ( intercalate, isPrefixOf )
+import           Data.List                      ( intercalate
+                                                , isPrefixOf
+                                                )
 import qualified Data.Map                      as Map
 import           Data.Maybe                     ( fromJust
                                                 , fromMaybe
@@ -21,8 +23,10 @@ import           Data.Maybe                     ( fromJust
 import           Test.Hspec
 import           Test.QuickCheck
 
-import           Purl.Purl.Internal (normalisePath, stringToLower)
 import           Purl.Purl
+import           Purl.Purl.Internal             ( normalisePath
+                                                , stringToLower
+                                                )
 
 
 
@@ -102,33 +106,38 @@ purlTestSuite =
     Left err -> it "fail on failure of parsing :)" $ do
       err `shouldBe` ""
 
-purlKnownTypeSpec kpt = let
-    pt = getKptPurlType kpt
+purlKnownTypeSpec kpt =
+  let
+    pt   = getKptPurlType kpt
     desc = getKptDescription kpt
-    examplesFromDescription = (map (dropWhile isSpace) . filter ("      pkg:" `isPrefixOf`) . lines) desc
-  in do
-    it (show pt ++ " should be in description") $ do
-      desc `shouldContain` show pt
-    case getKptDefaultRepository kpt of
-      Just d -> it (d ++ " should be in description") $ do
-        desc `shouldContain` d
-      Nothing -> pure ()
-    it ("there should be examples for " ++ show pt) $ do
-      length examplesFromDescription > 0 `shouldBe` True
-    mapM_ (\e -> do
-      let parsedE = parsePurl e
-      case parsedE of
-        Just parsedE' -> do
-          it (e ++ " should be a valid example for " ++ show pt) $ do
-            purlType parsedE' `shouldBe` (Just pt)
-        _ -> do
-          it (e ++ " should be parseable") $ do
-            parsedE `shouldNotBe` Nothing
-      ) examplesFromDescription
+    examplesFromDescription =
+      (map (dropWhile isSpace) . filter ("      pkg:" `isPrefixOf`) . lines)
+        desc
+  in
+    do
+      it (show pt ++ " should be in description") $ do
+        desc `shouldContain` show pt
+      case getKptDefaultRepository kpt of
+        Just d -> it (d ++ " should be in description") $ do
+          desc `shouldContain` d
+        Nothing -> pure ()
+      it ("there should be examples for " ++ show pt) $ do
+        length examplesFromDescription > 0 `shouldBe` True
+      mapM_
+        (\e -> do
+          let parsedE = parsePurl e
+          case parsedE of
+            Just parsedE' -> do
+              it (e ++ " should be a valid example for " ++ show pt) $ do
+                purlType parsedE' `shouldBe` (Just pt)
+            _ -> do
+              it (e ++ " should be parseable") $ do
+                parsedE `shouldNotBe` Nothing
+        )
+        examplesFromDescription
 
-purlTypesSpec = 
-  describe "PurlType" $ do
-    mapM_ ( purlKnownTypeSpec) knownPurlTypes
+purlTypesSpec = describe "PurlType" $ do
+  mapM_ (purlKnownTypeSpec) knownPurlTypes
 
 main :: IO ()
 main = hspec $ do
