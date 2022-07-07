@@ -8,11 +8,14 @@
 
 module Purl.Purl
   ( module X
+  , parsePurlType
   , purlTypeGeneric
   , normalisePurl
   , isPurlValid
   , parsePurlQualifiers
   , parsePurl
+  , heuristicallyRefinePurl'
+  , heuristicallyRefinePurl
   ) where
 
 import qualified Data.Aeson                    as A
@@ -35,6 +38,16 @@ import           Purl.Purl.Helper
 import           Purl.Purl.Internal            as X
 import           Purl.Purl.KnownTypes          as X
 
+parsePurlType :: String -> PurlType
+parsePurlType = String.fromString
+
+parseKnownPurlType :: String -> Maybe PurlType
+parseKnownPurlType raw = let
+  pt = parsePurlType raw
+  in if isTypeKnown pt
+     then Just pt
+     else Nothing
+
 purlTypeGeneric :: PurlType
 purlTypeGeneric = PurlType "generic"
 
@@ -44,17 +57,22 @@ normalisePurl =
     normalisePurlType (p@Purl { purlType = t }) =
       p { purlType = fmap (parsePurlType . show) t }
     normalisePurlPaths (p@Purl { purlNamespace = ns, purlName = n, purlSubpath = sp })
-      = p { purlNamespace = fmap normalisePath ns, purlName = normalisePath n }
+      = p { purlNamespace = (case fmap normalisePath ns of 
+        Just "" -> Nothing
+        ns -> ns), purlName = normalisePath n }
     normaliseSubpath (p@Purl { purlSubpath = sp }) =
-      p { purlSubpath = fmap normalisePath sp }
+      p { purlSubpath = (case fmap normalisePath sp of 
+        Just "" -> Nothing
+        sp -> sp)}
     normaliseQualifiers (p@Purl { purlQualifiers = q }) =
       p { purlQualifiers = Map.mapKeys stringToLower q }
-    normaliserFromType :: PurlType -> Purl -> Purl
-    normaliserFromType t = case t `Map.lookup` knownPurlTypeMap of
-      Just kpt -> getKptNormalizer kpt
-      Nothing  -> id
     normaliseFromType :: Purl -> Purl
-    normaliseFromType (p@Purl { purlType = Just t }) = normaliserFromType t p
+    normaliseFromType (p@Purl { purlType = Just t }) = let
+        normaliserFromType :: PurlType -> Purl -> Purl
+        normaliserFromType t = case t `Map.lookup` knownPurlTypeMap of
+          Just kpt -> getKptNormalizer kpt
+          Nothing  -> id
+      in normaliserFromType t p
     normaliseFromType p                              = p
   in
     normaliseFromType
@@ -189,3 +207,37 @@ instance A.FromJSON Purl where
   parseJSON (A.Number _) = fail "can not parse Number to Purl"
   parseJSON (A.Bool   _) = fail "can not parse Bool to Purl"
   parseJSON (A.Null    ) = fail "can not parse Null to Purl"
+
+heuristicallyRefinePurl' :: Purl -> Purl
+heuristicallyRefinePurl' = let
+    tryToExtractTypeFromString :: String -> (Maybe PurlType, String)
+    tryToExtractTypeFromString ('g' : 'o' : ':' : rst) = (Just (PurlType "golang"), rst)
+    tryToExtractTypeFromString ('p' : 'y' : 'p' : 'i' : ':' : rst) = (Just (PurlType "pypi"), rst)
+    tryToExtractTypeFromString ('P' : 'y' : 'P' : 'i' : ':' : rst) = (Just (PurlType "pypi"), rst)
+    tryToExtractTypeFromString str = case FP.splitPath str of
+      [] -> (Nothing, str)
+      "go" : rst -> (Just (PurlType "golang"), FP.joinPath rst)
+      fst  : rst -> case parseKnownPurlType fst of
+        Nothing -> (Nothing, str)
+        maybeT -> (maybeT, FP.joinPath rst)
+    tryToExtractType :: Purl -> Purl
+    tryToExtractType (p@Purl{purlType = Nothing, purlNamespace = Nothing, purlName = name}) = let
+        (newType, remainingName) = tryToExtractTypeFromString name
+      in case remainingName of
+        "" -> p
+        _  -> p{purlType = newType, purlName = remainingName}
+    tryToExtractType (p@Purl{purlType = Nothing, purlNamespace = Just namespace}) = let
+        (newType, remainingNamespace) = tryToExtractTypeFromString namespace
+      in case remainingNamespace of
+        "" -> p{purlType = newType, purlNamespace = Nothing}
+        _  -> p{purlType = newType, purlNamespace = Just remainingNamespace}
+    tryToExtractType p = p
+    tryToExtractNamespace :: Purl -> Purl
+    tryToExtractNamespace (p@Purl{purlNamespace = Nothing, purlName = name}) =  case FP.splitFileName name of
+      ("./"      , _    ) -> p
+      (namespace', "") -> p
+      (namespace', name') -> p{purlNamespace = Just (normalisePath namespace'), purlName = name'}
+    tryToExtractNamespace p = p
+  in tryToExtractNamespace . tryToExtractType
+heuristicallyRefinePurl :: Purl -> Purl
+heuristicallyRefinePurl = normalisePurl . heuristicallyRefinePurl' . normalisePurl

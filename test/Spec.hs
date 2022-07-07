@@ -102,6 +102,8 @@ purlTestSuite =
               Just parsedInputPurl' -> do
                 it (prefix ++ "provided parsed should match ") $ do
                   normalisePurl parsedInputPurl' `shouldBe` normalisePurl (_parsed_purl c)
+                it (prefix ++ "should not be changed by heuristicallyRefinePurl'") $ do
+                  heuristicallyRefinePurl' parsedInputPurl' `shouldBe` parsedInputPurl'
       ) cs
     Left err -> it "fail on failure of parsing :)" $ do
       err `shouldBe` ""

@@ -9,7 +9,6 @@ module Purl.Purl.Internal
   ( normalisePath
   , stringToLower
   , PurlType(..)
-  , parsePurlType
   , Purl(..)
   , purlScheme
   ) where
@@ -39,12 +38,10 @@ instance Show PurlType where
   show (PurlType t) = t
 instance String.IsString PurlType where
   fromString = PurlType . stringToLower
-parsePurlType :: String -> PurlType
-parsePurlType = String.fromString
 instance A.ToJSON PurlType where
   toJSON (PurlType t) = A.toJSON t
 instance A.FromJSON PurlType where
-  parseJSON = A.withText "PurlType" $ return . parsePurlType . T.unpack
+  parseJSON = A.withText "PurlType" $ return . String.fromString . T.unpack
 
 purlTypeGeneric :: PurlType
 purlTypeGeneric = PurlType "generic"
