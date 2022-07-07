@@ -25,6 +25,7 @@ import qualified Data.Map                      as Map
 import qualified Data.Map                      as Map
 import           Data.Maybe                     ( fromMaybe
                                                 , maybeToList
+                                                , isNothing
                                                 )
 import qualified Data.String                   as String
 import qualified Data.Text                     as T
@@ -76,6 +77,10 @@ namespaceMandatory =
       namespaceMandatoryFun (p@Purl { purlNamespace = Just "" }) = False
       namespaceMandatoryFun (p@Purl { purlNamespace = _ }) = True
   in  addValidator namespaceMandatoryFun
+
+noNamespace =
+  let noNamespaceFun (p@Purl {purlNamespace = ns}) = isNothing ns
+  in  addValidator noNamespaceFun
 
 versionMandatory =
   let versionMandatoryFun (p@Purl {purlVersion = Nothing}) = False
@@ -384,7 +389,7 @@ npm
       pkg:npm/%40angular/animation@12.3.1
       pkg:npm/mypackage@12.4.5?vcs_url=git://host.com/path/to/repo.git%404345abcd34343
 |]
-  , mkKPT "nuget" (defaultRepository "https://www.nuget.org") -- TODO: no namespace
+  , mkKPT "nuget" (defaultRepository "https://www.nuget.org" . noNamespace)
           [r|
 nuget
 -----
@@ -397,7 +402,7 @@ nuget
 
       pkg:nuget/EnterpriseLibrary.Common@6.0.1304
 |]
-  , mkKPT "oci" (nameCaseInsensitive) -- TODO: no namespace
+  , mkKPT "oci" (nameCaseInsensitive . noNamespace)
           [r|
 oci
 ------------
@@ -429,7 +434,7 @@ including container images built by Docker and others:
       pkg:oci/static@sha256%3A244fd47e07d10?repository_url=gcr.io/distroless/static&tag=latest
       pkg:oci/hello-wasm@sha256%3A244fd47e07d10?tag=v1
 |]
-  , mkKPT "pub" (defaultRepository "https://pub.dartlang.org" . nameCaseInsensitive) -- TODO: using underscores
+  , mkKPT "pub" (defaultRepository "https://pub.dartlang.org" . nameCaseInsensitive) -- TODO: only allowed chars are [a-z0-9_]
           [r|
 pub
 ----
