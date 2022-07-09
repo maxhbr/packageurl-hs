@@ -54,7 +54,7 @@ data Purl = Purl
   , purlQualifiers :: Map.Map String String
   , purlSubpath    :: Maybe FilePath
   }
-  deriving Eq
+  deriving (Eq, Ord)
 
 purlScheme :: String
 purlScheme = "pkg:"
