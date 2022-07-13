@@ -91,9 +91,7 @@ purlTestSuite =
                   True `shouldBe` True
           else do
             it (show (purlType (_parsed_purl c)) ++ " of " ++ _input_purl c ++ " should be a known type") $
-              ((\case
-                  Nothing -> True
-                  Just pt -> isTypeKnown pt) (purlType (_parsed_purl c))) `shouldBe` True
+              (isTypeKnown (purlType (_parsed_purl c))) `shouldBe` True
             it (prefix ++ "should successfully parse " ++ (_input_purl c)) $ do
               parsedInputPurl `shouldNotBe` Nothing
             it (prefix ++ "should successfully parse " ++ (_canonical_purl c)) $ do
@@ -101,9 +99,10 @@ purlTestSuite =
             case parsedInputPurl of
               Just parsedInputPurl' -> do
                 it (prefix ++ "provided parsed should match ") $ do
+                  A.toJSON (normalisePurl parsedInputPurl') `shouldBe` A.toJSON (_parsed_purl c)
                   normalisePurl parsedInputPurl' `shouldBe` normalisePurl (_parsed_purl c)
-                it (prefix ++ "should not be changed by heuristicallyRefinePurl'") $ do
-                  heuristicallyRefinePurl' parsedInputPurl' `shouldBe` parsedInputPurl'
+                it (prefix ++ "should not be changed by tryToExtractPurlType") $ do
+                  tryToExtractPurlType parsedInputPurl' `shouldBe` parsedInputPurl'
       ) cs
     Left err -> it "fail on failure of parsing :)" $ do
       err `shouldBe` ""
@@ -117,21 +116,21 @@ purlKnownTypeSpec kpt =
         desc
   in
     do
-      it (show pt ++ " should be in description") $ do
-        desc `shouldContain` show pt
+      it (pt ++ " should be in description") $ do
+        desc `shouldContain` pt
       case getKptDefaultRepository kpt of
         Just d -> it (d ++ " should be in description") $ do
           desc `shouldContain` d
         Nothing -> pure ()
-      it ("there should be examples for " ++ show pt) $ do
+      it ("there should be examples for " ++ pt) $ do
         length examplesFromDescription > 0 `shouldBe` True
       mapM_
         (\e -> do
           let parsedE = parsePurl e
           case parsedE of
             Just parsedE' -> do
-              it (e ++ " should be a valid example for " ++ show pt) $ do
-                purlType parsedE' `shouldBe` (Just pt)
+              it (e ++ " should be a valid example for " ++ pt) $ do
+                purlType parsedE' `shouldBe` pt
             _ -> do
               it (e ++ " should be parseable") $ do
                 parsedE `shouldNotBe` Nothing
@@ -165,12 +164,12 @@ main = hspec $ do
         )
         purls
     it "it should decode Purl corectly" $ do
-      (purlType =<< (parsePurl "pkg:npm/%40angular/animation@12.3.1"))
-        `shouldBe` (Just (PurlType "npm"))
-      (purlNamespace =<< (parsePurl "pkg:npm/%40angular/animation@12.3.1"))
+      (purlType <$> (parsePurl "pkg:npm/%40angular/animation@12.3.1"))
+        `shouldBe` (Just "npm")
+      (purlNamespace <$> (parsePurl "pkg:npm/%40angular/animation@12.3.1"))
         `shouldBe` (Just "@angular")
-      (fmap purlName (parsePurl "pkg:npm/%40angular/animation@12.3.1"))
+      (purlName <$> (parsePurl "pkg:npm/%40angular/animation@12.3.1"))
         `shouldBe` (Just "animation")
-      (purlVersion =<< (parsePurl "pkg:npm/%40angular/animation@12.3.1"))
+      (purlVersion <$> (parsePurl "pkg:npm/%40angular/animation@12.3.1"))
         `shouldBe` (Just "12.3.1")
     purlTestSuite

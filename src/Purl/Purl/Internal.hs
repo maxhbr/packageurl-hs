@@ -8,8 +8,11 @@
 module Purl.Purl.Internal
   ( normalisePath
   , stringToLower
-  , PurlType(..)
+  , PurlType
+  , parsePurlType
+  , purlTypeGeneric
   , Purl(..)
+  , purlNamespace
   , purlScheme
   ) where
 
@@ -31,58 +34,60 @@ import qualified System.FilePath               as FP
 
 import           Purl.Purl.Helper
 
-newtype PurlType
-  = PurlType String
-  deriving (Eq, Generic, Ord)
-instance Show PurlType where
-  show (PurlType t) = t
-instance String.IsString PurlType where
-  fromString = PurlType . stringToLower
-instance A.ToJSON PurlType where
-  toJSON (PurlType t) = A.toJSON t
-instance A.FromJSON PurlType where
-  parseJSON = A.withText "PurlType" $ return . String.fromString . T.unpack
+type PurlType = String
+parsePurlType :: String -> PurlType
+parsePurlType = stringToLower
 
 purlTypeGeneric :: PurlType
-purlTypeGeneric = PurlType "generic"
+purlTypeGeneric = "generic"
 
 data Purl = Purl
-  { purlType       :: Maybe PurlType
-  , purlNamespace  :: Maybe String
+  { purlType       :: PurlType
+  , purlNamespace' :: [String]
   , purlName       :: String
-  , purlVersion    :: Maybe String
+  , purlVersion    :: String
   , purlQualifiers :: Map.Map String String
-  , purlSubpath    :: Maybe FilePath
+  , purlSubpath    :: FilePath
   }
   deriving (Eq, Ord)
 
 purlScheme :: String
 purlScheme = "pkg:"
 
+purlNamespace :: Purl -> String
+purlNamespace = FP.joinPath . purlNamespace'
+
+renderPurlQualifiers :: Map.Map String String -> String
+renderPurlQualifiers pQualifier = if Map.null pQualifier
+  then ""
+  else
+    ( ('?' :)
+      . intercalate "&"
+      . map (\(k, v) -> k ++ "=" ++ (URI.encodeWith (/= ' ') v))
+      . Map.toList
+      )
+      pQualifier
+
 instance Show Purl where
-  show (Purl pType pNamespace pName pVersion pQualifier pSubpath) =
+  show purl =
     let
       uri = URI.URI
         { URI.uriScheme    = purlScheme
         , URI.uriAuthority = Nothing
-        , URI.uriPath      = FP.joinPath
-          (  (map
-               URI.encode
-               (show (purlTypeGeneric `fromMaybe` pType) : maybeToList pNamespace)
-             )
-          ++ [ (URI.encode pName)
-                 ++ (maybe "" ('@' :) (fmap URI.encode pVersion))
-             ]
-          )
-        , URI.uriQuery     = if Map.null pQualifier
-          then ""
-          else
-            ( ('?' :)
-              . intercalate "&"
-              . map (\(k, v) -> k ++ "=" ++ (URI.encodeWith (/= ' ') v))
-              . Map.toList
+        , URI.uriPath      =
+          let
+            beforeVersion = FP.joinPath
+              ( purlType purl
+              : (map URI.encode (purlNamespace' purl ++ [purlName purl]))
               )
-              pQualifier
-        , URI.uriFragment  = "" `fromMaybe` (fmap ('#' :) pSubpath)
+            version = case purlVersion purl of
+              ""       -> ""
+              pVersion -> '@' : (URI.encode pVersion)
+          in
+            beforeVersion ++ version
+        , URI.uriQuery     = (renderPurlQualifiers . purlQualifiers) purl
+        , URI.uriFragment  = case purlSubpath purl of
+                               ""       -> ""
+                               pSubpath -> ('#' :) pSubpath
         }
     in  show uri

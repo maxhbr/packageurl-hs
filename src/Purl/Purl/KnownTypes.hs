@@ -14,6 +14,7 @@ module Purl.Purl.KnownTypes
   , knownPurlTypes
   , knownPurlTypeMap
   , isTypeKnown
+  , parseKnownPurlType
   ) where
 
 import qualified Data.Aeson                    as A
@@ -39,6 +40,10 @@ import           Text.RawString.QQ
 import           Purl.Purl.Helper
 import           Purl.Purl.Internal
 
+parseKnownPurlType :: String -> Maybe PurlType
+parseKnownPurlType raw =
+  let pt = parsePurlType raw in if isTypeKnown pt then Just pt else Nothing
+
 data KnownPurlType = KPT
   { getKptPurlType          :: PurlType
   , getKptDefaultRepository :: Maybe String
@@ -49,7 +54,7 @@ data KnownPurlType = KPT
   }
 mkKPT :: String -> (KnownPurlType -> KnownPurlType) -> String -> KnownPurlType
 mkKPT t f description =
-  f $ KPT (PurlType t) Nothing id (const True) mempty description
+  f $ KPT (parsePurlType t) Nothing id (const True) mempty description
 
 defaultRepository :: String -> KnownPurlType -> KnownPurlType
 defaultRepository r kpt = kpt { getKptDefaultRepository = Just r }
@@ -66,29 +71,29 @@ addDescription :: String -> KnownPurlType -> KnownPurlType
 addDescription d kpt = kpt { getKptDescription = d }
 
 namespaceCaseInsensitive =
-  let namespacesToLowercase (p@Purl { purlNamespace = namespace }) =
-        p { purlNamespace = fmap stringToLower namespace }
+  let namespacesToLowercase (p@Purl { purlNamespace' = namespace }) =
+        p { purlNamespace' = map stringToLower namespace }
   in  addNormalizer namespacesToLowercase
 
 nameCaseInsensitive =
   let namesToLowercase (p@Purl { purlName = name }) =
         p { purlName = stringToLower name }
-  in  namespaceCaseInsensitive . (addNormalizer namesToLowercase)
+  in  namespaceCaseInsensitive  . (addNormalizer namesToLowercase)
 
 namespaceMandatory =
-  let namespaceMandatoryFun (p@Purl { purlNamespace = Nothing }) = False
-      namespaceMandatoryFun (p@Purl { purlNamespace = Just "" }) = False
-      namespaceMandatoryFun (p@Purl { purlNamespace = _ }      ) = True
+  let namespaceMandatoryFun (p@Purl { purlNamespace' = [] }  ) = False
+      namespaceMandatoryFun (p@Purl { purlNamespace' = [""] }) = False
+      namespaceMandatoryFun (p@Purl { purlNamespace' = _ }   ) = True
   in  addValidator namespaceMandatoryFun
 
 noNamespace =
-  let noNamespaceFun (p@Purl { purlNamespace = ns }) = isNothing ns
+  let noNamespaceFun (p@Purl { purlNamespace' = [] }) = True
+      noNamespaceFun _ = False
   in  addValidator noNamespaceFun
 
 versionMandatory =
-  let versionMandatoryFun (p@Purl { purlVersion = Nothing }) = False
-      versionMandatoryFun (p@Purl { purlVersion = Just "" }) = False
-      versionMandatoryFun (p@Purl { purlVersion = _ }      ) = False
+  let versionMandatoryFun (p@Purl { purlVersion = "" }) = False
+      versionMandatoryFun (p@Purl { purlVersion = _ } ) = False
   in  addValidator versionMandatoryFun
 
 knownPurlTypes =
@@ -171,9 +176,8 @@ composer
                Nothing -> False
                _       -> True
        in  \case
-             (p@(Purl { purlNamespace = Just _ })) -> hasChannelQualifier p
-             (p@(Purl { purlNamespace = Nothing })) ->
-               not $ hasChannelQualifier p
+             (p@(Purl { purlNamespace' = [] })) -> not $ hasChannelQualifier p
+             (p@(Purl { purlNamespace' = _ } )) -> hasChannelQualifier p
       )
     )
     [r|
@@ -505,9 +509,9 @@ pub
     . nameCaseInsensitive
     . addNormalizer
         (let underscoreToDash = map (\c -> if c == '_' then '-' else c)
-         in  (\p@Purl { purlNamespace = ns, purlName = n } -> p
-               { purlNamespace = fmap underscoreToDash ns
-               , purlName      = underscoreToDash n
+         in  (\p@Purl { purlNamespace' = ns, purlName = n } -> p
+               { purlNamespace' = fmap underscoreToDash ns
+               , purlName       = underscoreToDash n
                }
              )
         )

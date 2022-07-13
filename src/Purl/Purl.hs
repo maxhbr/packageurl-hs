@@ -8,13 +8,11 @@
 
 module Purl.Purl
   ( module X
-  , parsePurlType
-  , purlTypeGeneric
   , normalisePurl
   , isPurlValid
   , parsePurlQualifiers
   , parsePurl
-  , heuristicallyRefinePurl'
+  , tryToExtractPurlType
   , heuristicallyRefinePurl
   ) where
 
@@ -38,54 +36,44 @@ import           Purl.Purl.Helper
 import           Purl.Purl.Internal            as X
 import           Purl.Purl.KnownTypes          as X
 
-parsePurlType :: String -> PurlType
-parsePurlType = String.fromString
-
-parseKnownPurlType :: String -> Maybe PurlType
-parseKnownPurlType raw = let
-  pt = parsePurlType raw
-  in if isTypeKnown pt
-     then Just pt
-     else Nothing
-
-purlTypeGeneric :: PurlType
-purlTypeGeneric = PurlType "generic"
-
 normalisePurl :: Purl -> Purl
 normalisePurl =
-  let
-    normalisePurlType (p@Purl { purlType = t }) =
-      p { purlType = fmap (parsePurlType . show) t }
-    normalisePurlPaths (p@Purl { purlNamespace = ns, purlName = n, purlSubpath = sp })
-      = p { purlNamespace = (case fmap normalisePath ns of 
-        Just "" -> Nothing
-        ns -> ns), purlName = normalisePath n }
-    normaliseSubpath (p@Purl { purlSubpath = sp }) =
-      p { purlSubpath = (case fmap normalisePath sp of 
-        Just "" -> Nothing
-        sp -> sp)}
-    normaliseQualifiers (p@Purl { purlQualifiers = q }) =
-      p { purlQualifiers = Map.mapKeys stringToLower q }
-    normaliseFromType :: Purl -> Purl
-    normaliseFromType (p@Purl { purlType = Just t }) = let
-        normaliserFromType :: PurlType -> Purl -> Purl
-        normaliserFromType t = case t `Map.lookup` knownPurlTypeMap of
-          Just kpt -> getKptNormalizer kpt
-          Nothing  -> id
-      in normaliserFromType t p
-    normaliseFromType p                              = p
-  in
-    normaliseFromType
-    . normaliseQualifiers
-    . normaliseSubpath
-    . normalisePurlPaths
-    . normalisePurlType
+  let normalisePurlType (p@Purl { purlType = t }) =
+        p { purlType = parsePurlType t }
+      normalisePurlPaths (p@Purl { purlNamespace' = ns, purlName = n }) =
+        let normaliseNamespace :: [String] -> String -> ([String], String)
+            normaliseNamespace namespace name =
+              case
+                  (filter (/= "") . map FP.dropTrailingPathSeparator . concatMap FP.splitPath)
+                    (namespace ++ [name])
+                of
+                  []            -> (namespace, name)
+                  redistributed -> (init redistributed, last redistributed)
+            (newNS, newN) = normaliseNamespace ns n
+        in  p { purlNamespace' = newNS, purlName = newN }
+      normaliseSubpath (p@Purl {purlSubpath = ""}) = p
+      normaliseSubpath (p@Purl { purlSubpath = sp }) =
+        p { purlSubpath = normalisePath sp }
+      normaliseQualifiers (p@Purl { purlQualifiers = q }) =
+        p { purlQualifiers = Map.mapKeys stringToLower q }
+      normaliseFromType :: Purl -> Purl
+      normaliseFromType (p@Purl { purlType = t }) =
+        let normaliserFromType :: PurlType -> Purl -> Purl
+            normaliserFromType t = case t `Map.lookup` knownPurlTypeMap of
+              Just kpt -> getKptNormalizer kpt
+              Nothing  -> id
+        in  normaliserFromType t p
+  in  normaliseFromType
+        . normaliseQualifiers
+        . normaliseSubpath
+        . normalisePurlPaths
+        . normalisePurlType
 
 isPurlValid :: Purl -> Bool
-isPurlValid (Purl { purlName = "" }                ) = False
-isPurlValid (Purl { purlType = Nothing }           ) = False
-isPurlValid (Purl { purlType = Just (PurlType "") }) = False
-isPurlValid (p@Purl { purlType = Just t }) =
+isPurlValid (Purl { purlName = "" }         ) = False
+isPurlValid (Purl { purlNamespace' = [""] } ) = False
+isPurlValid (Purl { purlType = "" }) = False
+isPurlValid (p@Purl { purlType = t }) =
   let validatorFromType = case t `Map.lookup` knownPurlTypeMap of
         Just kpt -> getKptValidator kpt
         Nothing  -> const True
@@ -119,44 +107,32 @@ parsePurl uriStr                               = case URI.parseURI uriStr of
   Just uri ->
     let
       pScheme = URI.uriScheme uri
-      (pType, pNamespace, (pName, pVersion)) =
+      (pType, ((pNamespace, pName), pVersion)) =
         let
-          parseNameAndVersion :: String -> (String, Maybe String)
-          parseNameAndVersion pNameAndVersion =
-            case splitOn "@" pNameAndVersion of
-              [pName, pVersion] ->
-                (URI.decode pName, Just (URI.decode pVersion))
-              _ -> (URI.decode pNameAndVersion, Nothing)
-          path = URI.uriPath uri
-          prefixToTypeAndNamespace prefix =
-            case FP.splitPath (normalisePath prefix) of
-              []      -> (Nothing, Nothing)
-              [pType] -> (Just (FP.dropTrailingPathSeparator pType), Nothing)
-              (pType : ps) ->
-                let pNamespace = (normalisePath . FP.joinPath) ps
-                in  ( Just (FP.dropTrailingPathSeparator pType)
-                    , (Just . URI.decode) pNamespace
-                    )
+          getNameAndNamespace :: String -> ([String], String)
+          getNameAndNamespace prev =
+            case (map (URI.decode . FP.dropTrailingPathSeparator) . FP.splitPath) prev of
+              []    -> ([], "")
+              parts -> (init parts, last parts)
+          getVersion :: String -> (([String], String), String)
+          getVersion prev = case splitOn "@" prev of
+            [next, pVersion] -> (getNameAndNamespace next, URI.decode pVersion)
+            _                -> (getNameAndNamespace prev, "")
+          getPurlType :: String -> (PurlType, (([String], String), String))
+          getPurlType prev = case (map FP.dropTrailingPathSeparator . FP.splitPath) prev of
+            []  -> (purlTypeGeneric, (([], ""), ""))
+            [t] -> (parsePurlType t, (([], ""), ""))
+            t : nextParts ->
+              (parsePurlType t, getVersion (FP.joinPath nextParts))
         in
-          case FP.splitFileName path of
-            ("./", pNameAndVersion) ->
-              (Nothing, Nothing, parseNameAndVersion pNameAndVersion)
-            (prefix, pNameAndVersion) ->
-              let (t, ns) = prefixToTypeAndNamespace prefix
-              in  (t, ns, parseNameAndVersion pNameAndVersion)
-
+          (getPurlType . URI.uriPath) uri
       pQualifier = parsePurlQualifiers (URI.uriQuery uri)
       pSubpath   = case (URI.uriFragment uri) of
-        ""       -> Nothing
-        fragment -> Just (tail fragment)
+        ""       -> ""
+        fragment -> tail fragment
     in
       if pScheme == purlScheme
-        then Just $ Purl (fmap parsePurlType pType)
-                         pNamespace
-                         pName
-                         pVersion
-                         pQualifier
-                         pSubpath
+        then Just $ Purl pType pNamespace pName pVersion pQualifier pSubpath
         else Nothing
   Nothing -> Nothing
 
@@ -172,9 +148,8 @@ instance A.ToJSON Purl where
 
 instance A.FromJSON Purl where
   parseJSON (A.String t) = case (parsePurl . T.unpack) t of
-    Just p -> return p
-    Nothing ->
-      return $ Purl Nothing Nothing (T.unpack t) Nothing mempty Nothing
+    Just p  -> return p
+    Nothing -> return $ Purl purlTypeGeneric [] (T.unpack t) "" mempty ""
   parseJSON (A.Object o) =
     let parseQualifiers (Just (  A.String t')) = pure . Just $ T.unpack t'
         parseQualifiers (Just v@(A.Object _ )) = do
@@ -188,56 +163,26 @@ instance A.FromJSON Purl where
             )
             qualifiersMap
         parseQualifiers _ = pure Nothing
-    in  do
-          purl <-
-            Purl
-            <$>   o
-            A..:? "type"
-            <*>   o
-            A..:? "namespace"
-            <*>   o
-            A..:  "name"
-            <*>   o
-            A..:? "version"
-            <*>   ((mempty `fromMaybe`) <$> o A..:? "qualifiers")
-            <*>   o
-            A..:? "subpath"
-          pure purl
+    in  Purl  <$>  ((purlTypeGeneric `fromMaybe`) <$> o A..:? "type")
+              <*>  (([] `fromMaybe`) . (fmap (map FP.dropTrailingPathSeparator . FP.splitPath)) <$> o A..:? "namespace")
+              <*>  o
+              A..: "name"
+              <*>  (("" `fromMaybe`) <$> o A..:? "version")
+              <*>  ((mempty `fromMaybe`) <$> o A..:? "qualifiers")
+              <*>  (("" `fromMaybe`) <$> o A..:? "subpath")
   parseJSON (A.Array  _) = fail "can not parse Array to Purl"
   parseJSON (A.Number _) = fail "can not parse Number to Purl"
   parseJSON (A.Bool   _) = fail "can not parse Bool to Purl"
   parseJSON (A.Null    ) = fail "can not parse Null to Purl"
 
-heuristicallyRefinePurl' :: Purl -> Purl
-heuristicallyRefinePurl' = let
-    tryToExtractTypeFromString :: String -> (Maybe PurlType, String)
-    tryToExtractTypeFromString ('g' : 'o' : ':' : rst) = (Just (PurlType "golang"), rst)
-    tryToExtractTypeFromString ('p' : 'y' : 'p' : 'i' : ':' : rst) = (Just (PurlType "pypi"), rst)
-    tryToExtractTypeFromString ('P' : 'y' : 'P' : 'i' : ':' : rst) = (Just (PurlType "pypi"), rst)
-    tryToExtractTypeFromString str = case FP.splitPath str of
-      [] -> (Nothing, str)
-      "go" : rst -> (Just (PurlType "golang"), FP.joinPath rst)
-      fst  : rst -> case parseKnownPurlType fst of
-        Nothing -> (Nothing, str)
-        maybeT -> (maybeT, FP.joinPath rst)
-    tryToExtractType :: Purl -> Purl
-    tryToExtractType (p@Purl{purlType = Nothing, purlNamespace = Nothing, purlName = name}) = let
-        (newType, remainingName) = tryToExtractTypeFromString name
-      in case remainingName of
-        "" -> p
-        _  -> p{purlType = newType, purlName = remainingName}
-    tryToExtractType (p@Purl{purlType = Nothing, purlNamespace = Just namespace}) = let
-        (newType, remainingNamespace) = tryToExtractTypeFromString namespace
-      in case remainingNamespace of
-        "" -> p{purlType = newType, purlNamespace = Nothing}
-        _  -> p{purlType = newType, purlNamespace = Just remainingNamespace}
-    tryToExtractType p = p
-    tryToExtractNamespace :: Purl -> Purl
-    tryToExtractNamespace (p@Purl{purlNamespace = Nothing, purlName = name}) =  case FP.splitFileName name of
-      ("./"      , _    ) -> p
-      (namespace', "") -> p
-      (namespace', name') -> p{purlNamespace = Just (normalisePath namespace'), purlName = name'}
-    tryToExtractNamespace p = p
-  in tryToExtractNamespace . tryToExtractType
+
+tryToExtractPurlType :: Purl -> Purl
+tryToExtractPurlType (purl@Purl { purlType = "generic" }) =
+  case purlNamespace' purl of
+    potentialType : rest -> case parseKnownPurlType potentialType of
+      Just knownType -> purl { purlType = knownType, purlNamespace' = rest }
+      Nothing        -> purl
+    [] -> purl
+tryToExtractPurlType purl = purl
 heuristicallyRefinePurl :: Purl -> Purl
-heuristicallyRefinePurl = normalisePurl . heuristicallyRefinePurl' . normalisePurl
+heuristicallyRefinePurl = normalisePurl . tryToExtractPurlType . normalisePurl
