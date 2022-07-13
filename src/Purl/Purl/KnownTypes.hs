@@ -78,7 +78,7 @@ namespaceCaseInsensitive =
 nameCaseInsensitive =
   let namesToLowercase (p@Purl { purlName = name }) =
         p { purlName = stringToLower name }
-  in  namespaceCaseInsensitive  . (addNormalizer namesToLowercase)
+  in  namespaceCaseInsensitive . (addNormalizer namesToLowercase)
 
 namespaceMandatory =
   let namespaceMandatoryFun (p@Purl { purlNamespace' = [] }  ) = False

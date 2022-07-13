@@ -12,6 +12,7 @@ module Purl.Purl.Internal
   , parsePurlType
   , purlTypeGeneric
   , Purl(..)
+  , nullPurl
   , purlNamespace
   , purlScheme
   ) where
@@ -35,11 +36,11 @@ import qualified System.FilePath               as FP
 import           Purl.Purl.Helper
 
 type PurlType = String
-parsePurlType :: String -> PurlType
-parsePurlType = stringToLower
-
 purlTypeGeneric :: PurlType
 purlTypeGeneric = "generic"
+parsePurlType :: String -> PurlType
+parsePurlType "" = purlTypeGeneric
+parsePurlType t  = stringToLower t
 
 data Purl = Purl
   { purlType       :: PurlType
@@ -50,6 +51,8 @@ data Purl = Purl
   , purlSubpath    :: FilePath
   }
   deriving (Eq, Ord)
+nullPurl :: Purl
+nullPurl = Purl purlTypeGeneric [] "" "" mempty ""
 
 purlScheme :: String
 purlScheme = "pkg:"

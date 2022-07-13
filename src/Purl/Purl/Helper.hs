@@ -14,6 +14,6 @@ stringToLower :: String -> String
 stringToLower = map Char.toLower
 
 normalisePath :: FilePath -> FilePath
-normalisePath "" = ""
+normalisePath ""           = ""
 normalisePath ('/' : path) = normalisePath path
 normalisePath path         = (FP.normalise . FP.dropTrailingPathSeparator) path
