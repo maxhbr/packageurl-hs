@@ -103,6 +103,8 @@ purlTestSuite =
                   normalisePurl parsedInputPurl' `shouldBe` normalisePurl (_parsed_purl c)
                 it (prefix ++ "should not be changed by tryToExtractPurlType") $ do
                   tryToExtractPurlType parsedInputPurl' `shouldBe` parsedInputPurl'
+                it (prefix ++ "should json encode and decode correctly") $ do
+                  A.eitherDecode (A.encode parsedInputPurl') `shouldBe` Right parsedInputPurl'
       ) cs
     Left err -> it "fail on failure of parsing :)" $ do
       err `shouldBe` ""
@@ -173,3 +175,4 @@ main = hspec $ do
       (purlVersion <$> (parsePurl "pkg:npm/%40angular/animation@12.3.1"))
         `shouldBe` (Just "12.3.1")
     purlTestSuite
+

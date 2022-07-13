@@ -160,11 +160,19 @@ parsePurl uriStr                               = case URI.parseURI uriStr of
 instance A.ToJSON Purl where
   toJSON (Purl ty ns n v qs sp) = A.object
     [ "type" A..= ty
-    , "namespace" A..= ns
+    , "namespace" A..= (if ns == []
+                        then Nothing
+                        else Just (FP.joinPath ns))
     , "name" A..= n
-    , "version" A..= v
-    , "qualifiers" A..= qs
-    , "subpath" A..= sp
+    , "version" A..= (if v == ""
+                      then Nothing
+                      else Just v)
+    , "qualifiers" A..= (if qs == mempty
+                         then Nothing
+                         else Just (A.toJSON qs))
+    , "subpath" A..= (if sp == ""
+                      then Nothing
+                      else Just sp)
     ]
 
 instance A.FromJSON Purl where
