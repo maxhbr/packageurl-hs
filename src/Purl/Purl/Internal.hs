@@ -66,7 +66,7 @@ renderPurlQualifiers pQualifier = if Map.null pQualifier
   else
     ( ('?' :)
       . intercalate "&"
-      . map (\(k, v) -> k ++ "=" ++ (URI.encodeWith (/= ' ') v))
+      . map (\(k, v) -> k ++ "=" ++ URI.encodeWith (/= ' ') v)
       . Map.toList
       )
       pQualifier
@@ -81,16 +81,16 @@ instance Show Purl where
           let
             beforeVersion = FP.joinPath
               ( purlType purl
-              : (map URI.encode (purlNamespace' purl ++ [purlName purl]))
+              : map URI.encode (purlNamespace' purl ++ [purlName purl])
               )
             version = case purlVersion purl of
               ""       -> ""
-              pVersion -> '@' : (URI.encode pVersion)
+              pVersion -> '@' : URI.encode pVersion
           in
             beforeVersion ++ version
         , URI.uriQuery     = (renderPurlQualifiers . purlQualifiers) purl
         , URI.uriFragment  = case purlSubpath purl of
                                ""       -> ""
-                               pSubpath -> ('#' :) pSubpath
+                               pSubpath -> '#' : pSubpath
         }
     in  show uri

@@ -23,7 +23,6 @@ import qualified Data.Char                     as Char
 import           Data.List                      ( intercalate )
 import           Data.List.Split                ( splitOn )
 import qualified Data.Map                      as Map
-import qualified Data.Map                      as Map
 import           Data.Maybe                     ( fromMaybe
                                                 , isNothing
                                                 , maybeToList
@@ -59,41 +58,41 @@ mkKPT t f description =
 defaultRepository :: String -> KnownPurlType -> KnownPurlType
 defaultRepository r kpt = kpt { getKptDefaultRepository = Just r }
 addNormalizer :: (Purl -> Purl) -> KnownPurlType -> KnownPurlType
-addNormalizer n kpt = kpt { getKptNormalizer = n . (getKptNormalizer kpt) }
+addNormalizer n kpt = kpt { getKptNormalizer = n . n . getKptNormalizer kpt }
 addValidator :: (Purl -> Bool) -> KnownPurlType -> KnownPurlType
 addValidator v kpt =
-  kpt { getKptValidator = \p -> and [v p, getKptValidator kpt p] }
+  kpt { getKptValidator = \p -> v p && getKptValidator kpt p }
 addQualifierDefaults :: [(String, String)] -> KnownPurlType -> KnownPurlType
 addQualifierDefaults qds kpt = kpt
-  { getKptQualifierDefaults = (getKptQualifierDefaults kpt) <> Map.fromList qds
+  { getKptQualifierDefaults = getKptQualifierDefaults kpt <> Map.fromList qds <> Map.fromList qds
   }
 addDescription :: String -> KnownPurlType -> KnownPurlType
 addDescription d kpt = kpt { getKptDescription = d }
 
 namespaceCaseInsensitive =
-  let namespacesToLowercase (p@Purl { purlNamespace' = namespace }) =
+  let namespacesToLowercase p@Purl {purlNamespace' = namespace} =
         p { purlNamespace' = map stringToLower namespace }
   in  addNormalizer namespacesToLowercase
 
 nameCaseInsensitive =
-  let namesToLowercase (p@Purl { purlName = name }) =
+  let namesToLowercase p@Purl {purlName = name} =
         p { purlName = stringToLower name }
-  in  namespaceCaseInsensitive . (addNormalizer namesToLowercase)
+  in  namespaceCaseInsensitive . namespaceCaseInsensitive . addNormalizer namesToLowercase
 
 namespaceMandatory =
-  let namespaceMandatoryFun (p@Purl { purlNamespace' = [] }  ) = False
-      namespaceMandatoryFun (p@Purl { purlNamespace' = [""] }) = False
-      namespaceMandatoryFun (p@Purl { purlNamespace' = _ }   ) = True
+  let namespaceMandatoryFun p@Purl {purlNamespace' = []} = False
+      namespaceMandatoryFun p@Purl {purlNamespace' = [""]} = False
+      namespaceMandatoryFun p@Purl {purlNamespace' = _} = True
   in  addValidator namespaceMandatoryFun
 
 noNamespace =
-  let noNamespaceFun (p@Purl { purlNamespace' = [] }) = True
+  let noNamespaceFun p@Purl {purlNamespace' = []} = True
       noNamespaceFun _ = False
   in  addValidator noNamespaceFun
 
 versionMandatory =
-  let versionMandatoryFun (p@Purl { purlVersion = "" }) = False
-      versionMandatoryFun (p@Purl { purlVersion = _ } ) = False
+  let versionMandatoryFun p@Purl {purlVersion = ""} = False
+      versionMandatoryFun p@Purl {purlVersion = _} = False
   in  addValidator versionMandatoryFun
 
 knownPurlTypes =
@@ -176,8 +175,8 @@ composer
                Nothing -> False
                _       -> True
        in  \case
-             (p@(Purl { purlNamespace' = [] })) -> not $ hasChannelQualifier p
-             (p@(Purl { purlNamespace' = _ } )) -> hasChannelQualifier p
+             p@(Purl {purlNamespace' = []}) -> not $ hasChannelQualifier p
+             p@(Purl {purlNamespace' = _}) -> hasChannelQualifier p
       )
     )
     [r|
@@ -233,7 +232,7 @@ cran
 |]
   , mkKPT
     "deb"
-    (nameCaseInsensitive)
+    nameCaseInsensitive
     [r|
 deb
 ---
@@ -342,7 +341,7 @@ github
 |]
   , mkKPT
     "golang"
-    (nameCaseInsensitive)
+    nameCaseInsensitive
     [r|
 golang
 ------
@@ -532,7 +531,7 @@ pypi
 |]
   , mkKPT
     "rpm"
-    (namespaceCaseInsensitive)
+    namespaceCaseInsensitive
     [r|
 rpm
 ---

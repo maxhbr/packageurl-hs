@@ -40,9 +40,9 @@ import           Purl.Purl.KnownTypes          as X
 normalisePurl :: Purl -> Purl
 normalisePurl =
   let
-    normalisePurlType (p@Purl { purlType = t }) =
+    normalisePurlType p@Purl {purlType = t} =
       p { purlType = parsePurlType t }
-    normalisePurlPaths (p@Purl { purlNamespace' = ns, purlName = n }) =
+    normalisePurlPaths p@Purl {purlNamespace' = ns, purlName = n} =
       let
         normaliseNamespace :: [String] -> String -> ([String], String)
         normaliseNamespace namespace name =
@@ -58,17 +58,15 @@ normalisePurl =
         (newNS, newN) = normaliseNamespace ns n
       in
         p { purlNamespace' = newNS, purlName = newN }
-    normaliseSubpath (p@Purl { purlSubpath = "" }) = p
-    normaliseSubpath (p@Purl { purlSubpath = sp }) =
+    normaliseSubpath p@Purl {purlSubpath = ""} = p
+    normaliseSubpath p@Purl {purlSubpath = sp} =
       p { purlSubpath = normalisePath sp }
-    normaliseQualifiers (p@Purl { purlQualifiers = q }) =
+    normaliseQualifiers p@Purl {purlQualifiers = q} =
       p { purlQualifiers = Map.mapKeys stringToLower q }
     normaliseFromType :: Purl -> Purl
-    normaliseFromType (p@Purl { purlType = t }) =
+    normaliseFromType p@Purl {purlType = t} =
       let normaliserFromType :: PurlType -> Purl -> Purl
-          normaliserFromType t = case t `Map.lookup` knownPurlTypeMap of
-            Just kpt -> getKptNormalizer kpt
-            Nothing  -> id
+          normaliserFromType t = maybe id getKptNormalizer (t `Map.lookup` knownPurlTypeMap)
       in  normaliserFromType t p
   in
     normaliseFromType
@@ -81,13 +79,13 @@ isPurlValid :: Purl -> Bool
 isPurlValid (Purl { purlName = "" }        ) = False
 isPurlValid (Purl { purlNamespace' = [""] }) = False
 isPurlValid (Purl { purlType = "" }        ) = False
-isPurlValid (p@Purl { purlType = t }) =
+isPurlValid p@Purl {purlType = t} =
   let validatorFromType = case t `Map.lookup` knownPurlTypeMap of
         Just kpt -> getKptValidator kpt
         Nothing  -> const True
       validatorForQualifiers (Purl { purlQualifiers = qs }) =
-        all (all (\c -> and [Char.isAlpha c, Char.isLower c])) $ Map.keys qs
-  in  and [validatorFromType p, validatorForQualifiers p]
+        all (all (\c -> Char.isAlpha c && Char.isLower c)) $ Map.keys qs
+  in  (validatorFromType p && validatorForQualifiers p)
 
 parsePurlFromPath :: String -> Purl
 parsePurlFromPath path
@@ -125,16 +123,16 @@ parsePurlQualifiers =
   let parseQualifiersFindKey accum ('=' : qs') =
         parseQualifiersFindValue accum "" qs'
       parseQualifiersFindKey accum ('&' : qs') =
-        (accum, "") : (parseQualifiersFindKey "" qs')
+        (accum, "") : parseQualifiersFindKey "" qs'
       parseQualifiersFindKey accum (c : qs') =
         parseQualifiersFindKey (accum ++ [c]) qs'
       parseQualifiersFindKey ""    [] = []
-      parseQualifiersFindKey accum [] = (accum, "") : []
+      parseQualifiersFindKey accum [] = [(accum, "")]
       parseQualifiersFindValue key accum ('&' : qs') =
-        (key, URI.decode accum) : (parseQualifiersFindKey "" qs')
+        (key, URI.decode accum) : parseQualifiersFindKey "" qs'
       parseQualifiersFindValue key accum (c : qs') =
-        (parseQualifiersFindValue key (accum ++ [c]) qs')
-      parseQualifiersFindValue key accum [] = (key, URI.decode accum) : []
+        parseQualifiersFindValue key (accum ++ [c]) qs'
+      parseQualifiersFindValue key accum [] = [(key, URI.decode accum)]
   in  \case
         ""         -> mempty
         ('?' : qs) -> Map.fromList $ parseQualifiersFindKey "" qs
@@ -147,7 +145,7 @@ parsePurl uriStr                               = case URI.parseURI uriStr of
     let
       pScheme = URI.uriScheme uri
       pQualifier = parsePurlQualifiers (URI.uriQuery uri)
-      pSubpath   = case (URI.uriFragment uri) of
+      pSubpath   = case URI.uriFragment uri of
         ""       -> ""
         fragment -> tail fragment
       purlFromPath = parsePurlFromPath (URI.uriPath uri)
@@ -160,7 +158,7 @@ parsePurl uriStr                               = case URI.parseURI uriStr of
 instance A.ToJSON Purl where
   toJSON (Purl ty ns n v qs sp) = A.object
     [ "type" A..= ty
-    , "namespace" A..= (if ns == []
+    , "namespace" A..= (if null ns
                         then Nothing
                         else Just (FP.joinPath ns))
     , "name" A..= n
@@ -201,7 +199,7 @@ instance A.FromJSON Purl where
     in  Purl
           <$>  (o .::? ["type", "Type"] A..!= purlTypeGeneric)
           <*>  (     ([] `fromMaybe`)
-               .     (fmap (map FP.dropTrailingPathSeparator . FP.splitPath))
+               .     fmap (map FP.dropTrailingPathSeparator . FP.splitPath)
                <$>   o
                .::? ["namespace","Namespace"]
                )
