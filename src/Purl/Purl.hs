@@ -214,7 +214,7 @@ instance A.FromJSON Purl where
 
 
 tryToExtractPurlType :: Purl -> Purl
-tryToExtractPurlType (purl@Purl { purlType = "generic" }) =
+tryToExtractPurlType purl@Purl {purlType = "generic"} =
   case purlNamespace' purl of
     potentialType : rest -> case parseKnownPurlType potentialType of
       Just knownType -> purl { purlType = knownType, purlNamespace' = rest }
